@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}系统配置 - 静心{% endblock %}
+
+{% block content %}
+<h4 class="mb-2">设置</h4><p class="text-secondary mb-4">先配置交易账户，再按需设置 AI 和通知。每个区域独立保存。</p>
+
+<div class="settings-stack"><form id="configForm" data-section="account" onsubmit="saveSection(event, this)">
+  <!-- OKX API -->
+  <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-key"></i> OKX API 配置</div>
+    <div class="card-body">
+      <div class="form-check form-switch mb-3">
+        <input name="okx_simulated" type="checkbox" class="form-check-input" id="simSwitch"
+               {{ 'checked' if config.okx_simulated else '' }} onchange="toggleSimWarning()">
+        <label class="form-check-label" for="simSwitch" id="simLabel">
+          {{ '🟢 当前: 模拟盘模式 (使用模拟盘 API)' if config.okx_simulated else '🔴 当前: 实盘模式 (使用实盘 API)' }}
+        </label>
+      </div>
+
+<p class="form-text">密钥留空时保留已保存值，不会清除。Passphrase 是创建 API 时设置的口令。</p><button type="button" class="btn btn-sm btn-outline-secondary mb-3" id="otherCredentials" onclick="showOtherCredentials()">展开另一套账户凭据</button>
+      <div class="row g-3 mb-3">
+        <div class="col-12 credential-section">
+          <div class="border rounded p-3 h-100">
+            <h6 class="mb-3">实盘 API 凭证</h6>
+            <div class="mb-2">
+              <label class="form-label">实盘 API Key</label>
+              <div class="input-group">
+                <input name="okx_live_api_key" type="password" class="form-control"
+                       placeholder="{{ '••••••(已设置)' if config.okx_live_api_key_set else '未设置' }}">
+                <span class="input-group-text">
+                  <i class="bi {{ 'bi-check-circle text-success' if config.okx_live_api_key_set else 'bi-x-circle text-danger' }}"></i>
+                </span>
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">实盘 Secret Key</label>
+              <div class="input-group">
+                <input name="okx_live_secret_key" type="password" class="form-control"
+                       placeholder="{{ '••••••(已设置)' if config.okx_live_secret_key_set else '未设置' }}">
+                <span class="input-group-text">
+                  <i class="bi {{ 'bi-check-circle text-success' if config.okx_live_secret_key_set else 'bi-x-circle text-danger' }}"></i>
+                </span>
+              </div>
+            </div>
+            <div>
+              <label class="form-label">实盘 Passphrase</label>
+              <div class="input-group">
+                <input name="okx_live_passphrase" type="password" class="form-control"
+                       placeholder="{{ '••••••(已设置)' if config.okx_live_passphrase_set else '未设置' }}">
+                <span class="input-group-text">
+                  <i class="bi {{ 'bi-check-circle text-success' if config.okx_live_passphrase_set else 'bi-x-circle text-danger' }}"></i>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 credential-section">
+          <div class="border rounded p-3 h-100">
+            <h6 class="mb-3">模拟盘 API 凭证</h6>
+            <div class="mb-2">
+              <label class="form-label">模拟盘 API Key</label>
+              <div class="input-group">
+                <input name="okx_sim_api_key" type="password" class="form-control"
+                       placeholder="{{ '••••••(已设置)' if config.okx_sim_api_key_set else '未设置' }}">
+                <span class="input-group-text">
+                  <i class="bi {{ 'bi-check-circle text-success' if config.okx_sim_api_key_set else 'bi-x-circle text-danger' }}"></i>
+                </span>
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">模拟盘 Secret Key</label>
+              <div class="input-group">
+                <input name="okx_sim_secret_key" type="password" class="form-control"
+                       placeholder="{{ '••••••(已设置)' if config.okx_sim_secret_key_set else '未设置' }}">
+                <span class="input-group-text">
+                  <i class="bi {{ 'bi-check-circle text-success' if config.okx_sim_secret_key_set else 'bi-x-circle text-danger' }}"></i>
+                </span>
+              </div>
+            </div>
+            <div>
+              <label class="form-label">模拟盘 Passphrase</label>
+              <div class="input-group">
+                <input name="okx_sim_passphrase" type="password" class="form-control"
+                       placeholder="{{ '••••••(已设置)' if config.okx_sim_passphrase_set else '未设置' }}">
+                <span class="input-group-text">
+                  <i class="bi {{ 'bi-check-circle text-success' if config.okx_sim_passphrase_set else 'bi-x-circle text-danger' }}"></i>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="alert alert-danger {{ '' if not config.okx_simulated else 'd-none' }}" id="liveWarning">
+        <i class="bi bi-exclamation-triangle"></i>
+        <strong>警告：</strong>当前为实盘模式，将使用实盘 API 与真实资金交易，请确保已配置正确的实盘凭证并了解风险！
+      </div>
+
+      <div class="mt-3">
+        <button type="button" class="btn btn-outline-info" id="testConnBtn" onclick="testConnection(this)">
+          <i class="bi bi-wifi"></i> 测试已保存的交易账户
+        </button>
+        <p class="form-text mt-2">测试使用已保存的环境、密钥和代理，不会提交订单。修改后请先保存。</p><div id="connResult" class="mt-2 d-none"></div>
+      </div>
+    </div>
+  </div>
+
+<button type="submit" class="btn btn-primary">保存交易账户</button><div class="settings-feedback" role="status"></div></form>
+<details class="card settings-section"><summary><strong>币安账户</strong><span>U 本位合约 · 模拟盘 / 实盘 · 配置与只读测试</span></summary>
+<p class="form-text">币安凭据独立保存，不会切换现有 OKX 策略。本版本尚未接入币安策略执行、持仓监控或自动下单。</p><form id="binanceForm" data-section="binance" onsubmit="saveSection(event, this)">
+<details class="strategy-details" open><summary>模拟盘凭据</summary><p class="form-text">使用币安模拟盘环境创建的 API，不与另一环境混用。仅配置账户读取所需权限，不需要提现权限。</p><label class="form-label" for="binance_sim_api_key">模拟盘 API Key</label><input id="binance_sim_api_key" name="binance_sim_api_key" type="password" autocomplete="off" class="form-control mb-3" placeholder="{{ '已设置，留空保留' if config.binance_sim_api_key_set else '未设置' }}"><label class="form-label" for="binance_sim_secret_key">模拟盘 Secret Key</label><input id="binance_sim_secret_key" name="binance_sim_secret_key" type="password" autocomplete="off" class="form-control mb-3" placeholder="{{ '已设置，留空保留' if config.binance_sim_secret_key_set else '未设置' }}"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="testBinance(this, 'sim')">测试已保存的模拟盘账户</button><div class="settings-feedback binance-test-result" role="status"></div></details><details class="strategy-details" ><summary>实盘凭据</summary><p class="form-text">使用币安实盘环境创建的 API，不与另一环境混用。仅配置账户读取所需权限，不需要提现权限。</p><label class="form-label" for="binance_live_api_key">实盘 API Key</label><input id="binance_live_api_key" name="binance_live_api_key" type="password" autocomplete="off" class="form-control mb-3" placeholder="{{ '已设置，留空保留' if config.binance_live_api_key_set else '未设置' }}"><label class="form-label" for="binance_live_secret_key">实盘 Secret Key</label><input id="binance_live_secret_key" name="binance_live_secret_key" type="password" autocomplete="off" class="form-control mb-3" placeholder="{{ '已设置，留空保留' if config.binance_live_secret_key_set else '未设置' }}"><button type="button" class="btn btn-sm btn-outline-secondary" onclick="testBinance(this, 'live')">测试已保存的实盘账户</button><div class="settings-feedback binance-test-result" role="status"></div></details><label class="form-label" for="binance_proxy">币安连接代理（可选）</label><input name="binance_proxy" id="binance_proxy" class="form-control" value="{{ config.binance_proxy }}" placeholder="如 http://127.0.0.1:7890"><p class="form-text">密钥留空保留已保存值。测试使用已保存的对应环境凭据与代理，不下单，也不会自动保存输入。</p><button type="submit" class="btn btn-primary">保存币安配置</button><div class="settings-feedback" role="status"></div></form></details>
+<details class="card settings-section"><summary><strong>AI 服务</strong><span>{{ config.ai_default_provider }} · {{ config.ai_default_model }} · 点击编辑</span></summary><form data-section="ai" onsubmit="saveSection(event, this)">
+  <!-- AI Global Config -->
+  <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-cpu"></i> 全局 AI 配置 (策略未覆盖时使用)</div>
+    <div class="card-body">
+      <div class="row mb-3">
+        <div class="col-12">
+          <label class="form-label">默认 AI 提供商</label>
+          <select name="ai_default_provider" class="form-select">
+            <option value="deepseek" {{ 'selected' if config.ai_default_provider == 'deepseek' else '' }}>DeepSeek</option>
+            <option value="qwen" {{ 'selected' if config.ai_default_provider == 'qwen' else '' }}>Qwen (通义千问)</option>
+            <option value="local" {{ 'selected' if config.ai_default_provider == 'local' else '' }}>本地模型 (Ollama/vLLM/LocalAI)</option>
+            <option value="other" {{ 'selected' if config.ai_default_provider == 'other' else '' }}>其他</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label">默认模型</label>
+          <input name="ai_default_model" class="form-control" value="{{ config.ai_default_model }}" placeholder="如 deepseek-chat">
+        </div>
+        <div class="col-12">
+          <label class="form-label">API Base URL</label>
+          <input name="ai_default_base_url" class="form-control" value="{{ config.ai_default_base_url }}" placeholder="如 https://api.deepseek.com/v1">
+        </div>
+        <div class="col-12">
+          <label class="form-label">API Key</label>
+          <div class="input-group">
+            <input name="ai_default_api_key" type="password" class="form-control"
+                   placeholder="{{ '••••••(已设置)' if config.ai_default_api_key_set else '未设置' }}">
+            <span class="input-group-text">
+              <i class="bi {{ 'bi-check-circle text-success' if config.ai_default_api_key_set else 'bi-x-circle text-danger' }}"></i>
+            </span>
+          </div>
+        </div>
+      </div>
+<p class="form-text">填写基础地址，程序会追加 /chat/completions。策略未单独配置时使用这里的值；密钥留空保留原值。</p><details class="text-muted small"><summary>查看配置示例</summary>
+        <p class="mb-1"><strong>DeepSeek:</strong> Base URL = <code>https://api.deepseek.com/v1</code>, Model = <code>deepseek-chat</code></p>
+        <p class="mb-1"><strong>Qwen:</strong> Base URL = <code>https://dashscope.aliyuncs.com/compatible-mode/v1</code>, Model = <code>qwen-plus</code></p>
+        <p class="mb-0"><strong>本地模型 (Ollama/vLLM/LocalAI):</strong> Base URL 填本地地址如 <code>http://localhost:11434/v1</code>（Ollama）或 <code>http://localhost:8000/v1</code>（vLLM），API Key 可留空；Model 填实际部署的模型名</p>
+      </details>
+    </div>
+  </div>
+
+<button type="submit" class="btn btn-primary">保存 AI 配置</button><div class="settings-feedback" role="status"></div></form></details>
+<details class="card settings-section"><summary><strong>开仓通知</strong><span>{{ '已配置机器人' if config.tg_bot_token_set else '未配置' }} · Telegram · 点击编辑</span></summary><form id="notificationForm" data-section="notification" onsubmit="saveSection(event, this)">
+  <!-- Telegram Notification -->
+  <div class="card mb-4">
+    <div class="card-header"><i class="bi bi-telegram"></i> Telegram 开仓通知</div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label">Bot Token</label>
+          <div class="input-group">
+            <input name="tg_bot_token" type="password" class="form-control"
+                   placeholder="{{ '••••••(已设置)' if config.tg_bot_token_set else '未设置，如 123456:ABC-xyz' }}">
+            <span class="input-group-text">
+              <i class="bi {{ 'bi-check-circle text-success' if config.tg_bot_token_set else 'bi-x-circle text-danger' }}"></i>
+            </span>
+          </div>
+          <div class="form-text">通过 @BotFather 创建机器人后获取</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Chat ID</label>
+          <input name="tg_chat_id" class="form-control" value="{{ config.tg_chat_id }}"
+                 placeholder="如 123456789 或 -100xxxxxxxxx">
+          <div class="form-text">个人 ID 或群组 ID，可通过 @userinfobot 获取</div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Telegram 代理 (可选)</label>
+          <input name="tg_proxy" class="form-control" value="{{ config.tg_proxy }}"
+                 placeholder="如 http://127.0.0.1:7890">
+          <div class="form-text">无法直连 Telegram 时填写，留空表示直连。</div>
+        </div>
+      </div>
+      <div class="mt-3">
+        <button type="button" class="btn btn-outline-info btn-sm" onclick="testTelegram(this)">
+          <i class="bi bi-send"></i> 发送测试消息
+        </button>
+        <p class="form-text mt-2">使用当前输入发送消息；未填的密钥或接收人会使用已保存值，不会自动保存修改。</p><div id="tgTestResult" class="mt-2 d-none"></div>
+      </div>
+      <div class="form-text mt-2">
+        <i class="bi bi-info-circle"></i> 仅在策略成功<strong>开仓</strong>时发送通知，包含交易对、方向、开仓价、止盈止损及决策理由。
+      </div>
+    </div>
+  </div>
+
+<button type="submit" class="btn btn-primary">保存通知配置</button><div class="settings-feedback" role="status"></div></form></details>
+<details class="card settings-section" id="advancedSettings"><summary><strong>高级设置</strong><span>连接代理、账户持仓模式</span></summary><form data-section="advanced" onsubmit="saveSection(event, this)">      <div class="mb-3">
+        <label class="form-label">OKX 连接代理（可选）</label>
+        <input name="okx_proxy" class="form-control" value="{{ config.okx_proxy }}"
+               placeholder="如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080">
+        <div class="form-text">无法直连 OKX 时填写。留空表示直连；本机和服务器需分别配置。</div>
+      </div>
+<button type="submit" class="btn btn-primary">保存 OKX 代理</button><div class="settings-feedback" role="status"></div></form>      <div class="border rounded p-3 mb-3" id="positionModeBox">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <strong><i class="bi bi-diagram-3"></i> 账户持仓模式</strong>
+          <span id="positionModeBadge" class="badge text-bg-secondary">展开后读取</span>
+        </div>
+        <div class="row g-2 align-items-end">
+          <div class="col-12">
+            <label class="form-label mb-1">切换为</label>
+            <select id="positionModeSelect" class="form-select">
+              <option value="net_mode">单向持仓 (net_mode)</option>
+              <option value="long_short_mode">双向持仓 (long_short_mode)</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <button type="button" class="btn btn-outline-primary w-100" id="setPositionModeBtn" onclick="setPositionMode()">
+              应用持仓模式
+            </button>
+          </div>
+          <div class="col-12">
+            <div id="positionModeTip" class="form-text">
+              注: 切换模式前请先平掉相关持仓/挂单，否则交易所可能拒绝切换。
+            </div>
+          </div>
+        </div>
+      </div>
+
+</details></div>
+{% endblock %}
+
+{% block scripts %}<script src="/static/settings.js?v=20261106-1"></script>{% endblock %}

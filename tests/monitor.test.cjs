@@ -1,0 +1,7 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const elements={};function element(id){return elements[id]??=( {checked:true,hidden:true,disabled:false,textContent:'',dataset:{monitorInterval:'15'},addEventListener(type,cb){this[type]=cb;},contains(){return false;},classList:{toggle(){}}});}
+let fetches=0,nextTimer;const events={};
+const document={hidden:false,activeElement:null,querySelector(selector){return selector==='[data-monitor-interval]'?element('toolbar'):selector==='#monitorContent'?element('monitorContent'):null;},querySelectorAll(){return [];},getElementById(id){return id==='monitorChartData'?null:element(id);},addEventListener(type,cb){events[type]=cb;}};
+const context={document,window:{addEventListener(){}},localStorage:{getItem(){return null;},setItem(){}},location:{pathname:'/logs',search:'?page=2'},Date,Number,JSON,URL,AbortController,fetch:async()=>{fetches++;throw Error('网络断开');},setTimeout(cb){nextTimer=cb;return 1;},clearTimeout(){}};
+vm.runInNewContext(fs.readFileSync('static/monitor.js','utf8'),context);
+(async()=>{await context.window.refreshMonitor();assert.equal(fetches,1);assert.equal(element('monitorError').hidden,false);assert.match(element('monitorError').textContent,/已保留上次页面数据/);assert.equal(element('monitorRefresh').disabled,false);document.hidden=true;await context.window.refreshMonitor();assert.equal(fetches,1);assert(nextTimer);console.log('刷新失败保留内容、解除按钮禁用、后台暂停通过');})().catch(e=>{console.error(e);process.exitCode=1;});

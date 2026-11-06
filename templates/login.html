@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 - 静心</title>
+<script>
+(function(){let mode;try{mode=localStorage.getItem('theme-mode');}catch(_){}document.documentElement.dataset.theme=mode|| (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');})();
+</script>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<link href="/static/login.css?v=20261106-1" rel="stylesheet">
+</head>
+<body>
+<header class="login-header"><a href="/" class="brand">静心<span>个人交易工作台</span></a><button type="button" id="themeToggle" aria-label="切换日夜主题">切换主题</button></header>
+<main class="login-layout">
+<section class="intro" aria-label="静心交易工作台"><div class="eyebrow">静心 / TRADING WORKSPACE</div><h1>专注决策，<br>从容交易。</h1><p>将账户、策略与交易记录归于一处，<br>让每一次操作，都清晰可循。</p><div class="intro-divider"></div><div class="features"><span>账户概览</span><span>策略管理</span><span>运行记录</span></div><span class="intro-note">保持专注，尊重风险。</span></section>
+<section class="login-panel" aria-labelledby="loginTitle"><div class="panel-label">账户访问</div><h2 id="loginTitle">登录静心</h2><p class="subtitle">欢迎回来，进入你的交易工作台。</p>
+{% if error %}<div class="login-error" role="alert">{{ error }}</div>{% endif %}
+<form method="post" action="/login">
+<input type="hidden" name="next" value="{{ next }}">
+<label for="username">用户名</label><input id="username" name="username" placeholder="请输入用户名" autocomplete="username" required autofocus>
+<label for="password">密码</label><div class="password-field"><input id="password" name="password" type="password" placeholder="请输入密码" autocomplete="current-password" required><button type="button" id="passwordToggle" aria-label="显示密码" aria-pressed="false">显示</button></div>
+<button class="submit" type="submit">登录工作台 <span aria-hidden="true">→</span></button>
+</form><div class="panel-footer">仅限授权账户访问 · 请妥善保管登录凭据</div></section>
+</main>
+<footer class="login-footer"><span>静心 · 个人交易工作台</span><span>独立思考，审慎决策。</span></footer>
+<script>
+const themeButton=document.getElementById('themeToggle');
+function themeLabel(){const dark=document.documentElement.dataset.theme==='dark';themeButton.innerHTML=dark?'<i class="bi bi-moon" aria-hidden="true"></i>':'<i class="bi bi-sun" aria-hidden="true"></i>';themeButton.setAttribute('aria-label',dark?'切换到日间模式':'切换到夜间模式');themeButton.title=themeButton.getAttribute('aria-label');}themeLabel();
+themeButton.addEventListener('click',()=>{const mode=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=mode;try{localStorage.setItem('theme-mode',mode);}catch(_){}themeLabel();});
+const toggle=document.getElementById('passwordToggle');const password=document.getElementById('password');toggle.addEventListener('click',()=>{const show=password.type==='password';password.type=show?'text':'password';toggle.textContent=show?'隐藏':'显示';toggle.setAttribute('aria-label',show?'隐藏密码':'显示密码');toggle.setAttribute('aria-pressed',String(show));});
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+*.db*
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+data
+backups
+tests
+images
+.runtime.lock
+
+.env-*

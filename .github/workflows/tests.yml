@@ -1,0 +1,32 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  unittest:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: pip install -r requirements.txt
+      - name: Initialize isolated test config
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          from app.security import hash_password
+          from cryptography.fernet import Fernet
+          import secrets
+          Path('.env').write_text('APP_USERNAME=test-admin\nAPP_PASSWORD_HASH='+hash_password('ci-test-only-password')+'\nAPP_SESSION_SECRET='+secrets.token_urlsafe(48)+'\nENCRYPTION_KEY='+Fernet.generate_key().decode()+'\n')
+          from app.models import init_db
+          init_db()
+          PY
+      - run: python -m unittest discover -s tests -v

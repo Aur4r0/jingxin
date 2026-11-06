@@ -1,0 +1,21 @@
+[Unit]
+Description=Jingxin trading workspace
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jingxin
+Group=jingxin
+WorkingDirectory=/opt/jingxin
+ExecStart=/opt/jingxin/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-proxy-headers
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

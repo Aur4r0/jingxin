@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}策略管理 - 静心{% endblock %}
+
+{% block content %}
+<nav class="pp-section-tabs" aria-label="页面分类"><a href="/strategies" aria-current="page">交易策略</a><a href="/prompt-templates">提示词模板</a></nav>
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h4><i class="bi bi-gear"></i> AI 策略管理</h4>
+  <a href="/strategies/new" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新建策略</a>
+</div>
+
+{% if not strategies %}
+<div class="text-center py-5 text-muted">
+  <i class="bi bi-inbox" style="font-size:3rem"></i>
+  <p class="mt-2">暂无策略，点击右上角创建</p>
+</div>
+{% else %}
+<div class="row">
+  {% for s in strategies %}
+  <div class="col-md-6 col-xl-4 mb-3">
+    <div class="card card-strategy h-100 {{ 'border-success' if s.enabled else 'border-secondary' }}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>{{ s.name }}</strong>
+        <span class="badge {{ 'bg-light text-success' if s.enabled else 'bg-secondary' }}">
+          {{ '已启用' if s.enabled else '已暂停' }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="mb-2">
+          <small class="text-muted">AI模型:</small>
+          <span class="ms-1">{{ s.ai_provider or '全局默认' }} / {{ s.ai_model or '默认' }}</span>
+        </div>
+        <div class="mb-2">
+          <small class="text-muted">交易对:</small>
+          <div>
+            {% for sym in s.symbols %}
+            <span class="badge bg-info me-1 mb-1">{{ sym }}</span>
+            {% else %}
+            <span class="text-muted">未配置</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="row text-center mt-2">
+          <div class="col-3"><small class="text-muted d-block">周期</small><strong>{{ s.interval_minutes }}分</strong></div>
+          <div class="col-3"><small class="text-muted d-block">杠杆</small><strong>{{ s.leverage }}x</strong></div>
+          <div class="col-3"><small class="text-muted d-block">开仓名义金额</small><strong>{{ s.position_usdt }} U</strong></div>
+          <div class="col-3"><small class="text-muted d-block">止盈止损</small><strong class="text-info"><i class="bi bi-robot"></i> AI</strong></div>
+        </div>
+      </div>
+      <div class="card-footer d-flex gap-2">
+        <button class="btn btn-sm {{ 'btn-warning' if s.enabled else 'btn-success' }}"
+                data-enabled="{{ 'true' if s.enabled else 'false' }}" data-name="{{ s.name }}" onclick="toggleStrategy({{ s.id }}, this)">
+          <i class="bi {{ 'bi-pause' if s.enabled else 'bi-play' }}"></i>
+          {{ '暂停' if s.enabled else '启动' }}
+        </button>
+        <button class="btn btn-sm btn-outline-primary" data-name="{{ s.name }}" onclick="runNow({{ s.id }}, this)">
+          <i class="bi bi-lightning"></i> 立即执行
+        </button>
+        <a href="/strategies/{{ s.id }}/edit" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-pencil"></i> 编辑
+        </a>
+        <button class="btn btn-sm btn-outline-danger" data-name="{{ s.name }}" aria-label="删除策略" onclick="deleteStrategy({{ s.id }}, this.dataset.name)">
+          <i class="bi bi-trash"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function toggleStrategy(id, btn) {
+  const enabled = btn.dataset.enabled === 'true';
+  if (!await confirmAction({title: enabled ? '暂停策略' : '启用策略', detail: `策略：${btn.dataset.name}。${enabled ? '暂停后不再定时执行，已有持仓不会自动平仓。已提交的执行任务可能继续运行。' : '启用后将按配置周期执行，可能提交订单。'}`, confirmText: enabled ? '确认暂停' : '确认启用'})) return;
+  setLoading(btn, true);
+  try {
+    const data = await api('POST', `/strategies/${id}/toggle`);
+    showToast(data.enabled ? '策略已启动' : '策略已暂停');
+    setTimeout(() => location.reload(), 500);
+  } catch (e) { showToast(e.message, 'error'); setLoading(btn, false); }
+}
+
+async function runNow(id, btn) {
+  if (!await confirmAction({title:'立即执行策略', detail:`策略：${btn.dataset.name}。立即运行一次，可能开仓或平仓；操作不会仅停留在 AI 分析。`,confirmText:'确认执行'})) return;
+  setLoading(btn, true);
+  try {
+    const data = await api('POST', `/strategies/${id}/run`);
+    showToast(data.message);
+  } catch (e) { showToast('执行失败: ' + e.message, 'error'); }
+  setLoading(btn, false);
+}
+
+async function deleteStrategy(id, name) {
+  if (!await confirmAction({title:'删除策略', detail:`策略：${name}。相关运行日志和本地交易记录也会永久删除，无法恢复；交易所已有持仓不会因此平仓。`,confirmText:'永久删除',danger:true})) return;
+  try {
+    await api('DELETE', `/strategies/${id}`);
+    showToast('已删除');
+    setTimeout(() => location.reload(), 500);
+  } catch (e) { showToast('删除失败: ' + e.message, 'error'); }
+}
+</script>
+{% endblock %}
