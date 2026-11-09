@@ -1,124 +1,24 @@
 {% extends "base.html" %}
-{% block title %}持仓管理 - 静心{% endblock %}
-{% block head %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script><script src="/static/overview.js?v=20261106-1"></script><script src="/static/monitor.js?v=20261106-1"></script>
-{% endblock %}
-
+{% from "components/workspace.html" import heading, empty, number, status, monitor %}
+{% block title %}当前持仓 - 静心{% endblock %}
 {% block content %}
-<div class="monitor-toolbar" data-monitor-interval="15"><label class="monitor-toggle"><input id="monitorAuto" type="checkbox" checked> 自动刷新 · 15 秒</label><span id="monitorStatus" role="status" aria-live="polite">已显示本次页面数据</span><button id="monitorRefresh" type="button" class="btn btn-sm btn-outline-secondary">刷新数据</button></div><div id="monitorError" class="monitor-error" role="alert" hidden></div><div id="monitorContent">
+{{ monitor(15) }}<div id="monitorContent">
 <nav class="pp-section-tabs" aria-label="页面分类"><a href="/positions" aria-current="page">当前持仓</a><a href="/trades">历史交易</a></nav>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4><i class="bi bi-wallet2"></i> 持仓管理
-    {% if is_simulated %}
-    <span class="badge bg-warning text-dark ms-2" title="当前为模拟盘，持仓来自 OKX 模拟账户">🧪 模拟盘</span>
-    {% else %}
-    <span class="badge bg-danger ms-2" title="当前为实盘，持仓来自真实账户">🔴 实盘</span>
-    {% endif %}
-  </h4>
-  <button class="btn btn-outline-primary btn-sm" id="syncBtn" onclick="syncPositions(this)">
-    <i class="bi bi-arrow-repeat"></i> 同步持仓
-  </button>
+{% call heading('当前持仓','查看本地同步记录，平仓前请核对交易所实际仓位','账户 / 持仓') %}{{ status('模拟盘' if is_simulated else '实盘 · 涉及真实资金','neutral' if is_simulated else 'negative') }}<button class="btn btn-sm btn-outline-secondary" id="syncBtn" onclick="syncPositions(this)">同步持仓</button>{% endcall %}
+{% if not is_simulated %}<p class="jx-alert" role="alert">当前使用实盘配置，平仓操作会涉及真实资金。页面记录不替代交易所核对。</p>{% endif %}
+<div id="positionActionResult" class="jx-inline-feedback" role="status"></div>
+<div class="jx-metrics jx-three"><article><span>持仓记录</span><div>{{ positions|length }} <small>条</small></div><small>本地记录，不代表实时交易所全量仓位</small></article><article class="jx-metric-focus"><span>浮动盈亏 <small>USDT</small></span><div>{{ number(pnl,4,true) }}</div><small>不含已实现盈亏</small></article><article><span>记录更新时间</span><div class="jx-time-value">{{ position_time|bj_time }}</div><small>页面自动刷新不会重新请求交易所</small></article></div>
+{% if runtime is defined and runtime.get('positions') and not runtime.positions.ok %}<p class="jx-alert" role="alert">持仓同步异常 · {{ runtime.positions.message }}。保留上次记录，不代表当前交易所状态。</p>{% endif %}
+<section class="jx-panel"><div class="jx-section-head"><h2>持仓明细</h2><span>数量单位：合约张数 · 盈亏单位：USDT</span></div><div class="jx-position-head jx-position-grid"><span>交易对 / 方向</span><span>合约张数</span><span>持仓均价</span><span>浮动盈亏</span><span>保护单状态</span><span>操作</span></div>
+{% for p in positions %}<div class="jx-position-item"><details class="jx-position-record" data-pos-key="{{ p.symbol }}|{{ p.side }}"><summary class="jx-position-grid"><strong data-label="交易对 / 方向">{{ p.symbol }}<small>{{ '多仓' if p.side == 'long' else '空仓' if p.side == 'short' else '方向待核实' }}</small></strong><span data-label="合约张数" class="js-size">{{ p.size|ui_number(4) }}</span><span data-label="持仓均价">{{ number(p.avg_price if p.avg_price and p.avg_price > 0 else none,4) }}</span><span data-label="浮动盈亏">{{ number(p.unrealized_pnl,4,true) }}</span><span data-label="保护单状态" class="jx-muted">待核实 <i class="jx-chevron" aria-hidden="true"></i></span></summary>
+<dl class="jx-info-grid"><div><dt>杠杆</dt><dd>{{ p.leverage if p.leverage is not none else '待核实' }}x</dd></div><div><dt>保证金（本地记录）</dt><dd>{{ p.margin|ui_number(4) }} USDT</dd></div><div><dt>止盈价格记录</dt><dd>{{ p.tp_price if p.tp_price is not none else '未确认' }}</dd></div><div><dt>止损价格记录</dt><dd>{{ p.sl_price if p.sl_price is not none else '未确认' }}</dd></div><div><dt>本地策略关联 · 未核实</dt><dd>{{ strategy_names.get(p.strategy_id,'未关联') }}</dd></div><div><dt>记录时间</dt><dd><span data-record-time="{{ p.updated_at|utc_iso }}">{{ p.updated_at|bj_time }}</span></dd></div></dl><p class="jx-caption">现有数据只保存保护价格，无法证明算法单当前有效或数量匹配。未记录价格也不能直接认定没有保护单。基础币数量和名义金额因缺少已核实合约规格，不作推算。</p></details>
+<button class="btn btn-sm btn-outline-danger jx-close-position" data-symbol="{{ p.symbol }}" data-side="{{ p.side }}" data-size="{{ p.size }}" onclick="closePos(this.dataset.symbol,this.dataset.side,this)">平仓</button></div>{% else %}{{ empty('暂无本地持仓记录','未配置账户或同步失败时也可能没有记录，请先核对同步状态。') }}{% endfor %}</section>
+<details class="jx-note"><summary>持仓数据说明</summary><p>本页不自动平仓、撤单或调整保护单。同步持仓使用已保存账户配置；原有平仓入口保留确认步骤。暂停策略不会关闭持仓，实盘操作前请再次核对环境。</p></details>
 </div>
-
-{% if not positions %}
-<div class="text-center py-5 text-muted">
-  <i class="bi bi-inbox" style="font-size:3rem"></i>
-  <p class="mt-2">暂无本地持仓记录；未配置账户或同步失败也可能没有记录。</p>
-</div>
-{% else %}
-<div class="table-responsive">
-  <table class="table table-hover">
-    <thead class="table-dark">
-      <tr>
-        <th>交易对</th>
-        <th>方向</th>
-        <th>数量</th>
-        <th>均价</th>
-        <th>杠杆</th>
-        <th>未实现盈亏</th>
-        <th>保证金</th>
-        <th>止盈</th>
-        <th>止损</th>
-        <th>所属策略</th><th>记录更新时间</th>
-        <th>操作</th>
-      </tr>
-    </thead>
-    <tbody id="positionsTbody">
-      {% for p in positions %}
-      <tr data-pos-key="{{ p.symbol }}|{{ p.side }}" data-strategy-id="{{ p.strategy_id or '' }}">
-        <td><strong>{{ p.symbol }}</strong></td>
-        <td><span class="badge {{ 'bg-success' if p.side == 'long' else 'bg-danger' }}">{{ '多' if p.side == 'long' else '空' }}</span></td>
-        <td class="js-size">{{ p.size }}</td>
-        <td class="js-avg">{{ p.avg_price }}</td>
-        <td class="js-lev">{{ p.leverage }}x</td>
-        <td class="js-upnl {{ 'text-success' if p.unrealized_pnl >= 0 else 'text-danger' }}">
-          {{ '+' if p.unrealized_pnl >= 0 else '' }}{{ '%.4f'|format(p.unrealized_pnl) }}
-        </td>
-        <td class="js-margin">{{ '%.2f'|format(p.margin) }}</td>
-        <td class="js-tp">{{ p.tp_price if p.tp_price is not none else '-' }}</td>
-        <td class="js-sl">{{ p.sl_price if p.sl_price is not none else '-' }}</td>
-        <td class="js-strategy">
-          {% if p.strategy_id %}
-          <span class="badge bg-info">{{ strategy_names.get(p.strategy_id, '#' ~ p.strategy_id) }}</span>
-          {% else %}-{% endif %}
-        </td>
-        <td><span data-record-time="{{ p.updated_at.isoformat() }}Z">{{ p.updated_at|bj_time }}</span></td><td>
-          <button class="btn btn-outline-danger btn-sm" onclick="closePos('{{ p.symbol }}', '{{ p.side }}', this)">
-            <i class="bi bi-x-circle"></i> 平仓
-          </button>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% endif %}
-
-<div class="card overview-panel mt-4"><div class="overview-panel-head"><h2>账户净值</h2><span class="overview-hint">数据库快照 · 非实时行情</span></div>{% if equity_data %}<div id="chartSummary" class="overview-chart-summary"></div><div class="overview-chart"><canvas id="equityChart" role="img" aria-label="账户权益变化"></canvas></div>{% else %}<div class="overview-empty">暂无账户净值记录，请先检查账户配置。</div>{% endif %}</div><script type="application/json" id="monitorChartData">{{ equity_json|safe }}</script><script src="/static/overview.js?v=20261106-1"></script><script src="/static/monitor.js?v=20261106-1"></script>
 {% endblock %}
-
-{% block scripts %}
-<script>
-const strategyNames = {{ strategy_names|tojson }};
-
-function fmtNum(v, digits = 4) {
-  const n = Number(v || 0);
-  return n.toFixed(digits);
-}
-
-function renderStrategyBadge(strategyId) {
-  if (!strategyId) return '-';
-  const name = strategyNames[String(strategyId)] || strategyNames[strategyId] || ('#' + strategyId);
-  return `<span class="badge bg-info">${name}</span>`;
-}
-
-async function refreshPositionsLive() { if(window.refreshMonitor) await window.refreshMonitor(); }
-
-async function syncPositions(btn) {
-  setLoading(btn, true);
-  try {
-    await api('POST', '/positions/sync');
-    showToast('同步请求已处理，请核对持仓记录及更新时间');
-    await refreshPositionsLive();
-  } catch (e) {
-    showToast('同步失败: ' + e.message, 'error');
-  }
-  setLoading(btn, false);
-}
-
-async function closePos(symbol, side, btn) {
-  const label = side === 'long' ? '多' : '空';
-  const size = btn.closest('tr').querySelector('.js-size').textContent.trim();
-  if (!await confirmAction({title:'确认平仓',detail:`${symbol} · ${label}单 · 当前显示数量 ${size} 张。将按服务端查询到的该方向持仓数量提交平仓；成交价以交易所结果为准。`,confirmText:'提交平仓',danger:true})) return;
-  setLoading(btn, true);
-  try {
-    const data = await api('POST', '/positions/close', { symbol, side });
-    showToast(data.message);
-    await refreshPositionsLive();
-
-  } catch (e) { showToast('平仓失败: ' + e.message, 'error'); }
-  setLoading(btn, false);
-}
-
-</script><script src="/static/overview.js?v=20261106-1"></script><script src="/static/monitor.js?v=20261106-1"></script>
-{% endblock %}
+{% block scripts %}<script>
+function positionFeedback(message,error=false){const el=document.getElementById('positionActionResult');el.textContent=message;el.className='jx-inline-feedback '+(error?'negative':'');el.setAttribute('role',error?'alert':'status');}
+async function refreshPositionsLive(){if(window.refreshMonitor)await window.refreshMonitor();}
+async function syncPositions(btn){setLoading(btn,true);try{await api('POST','/positions/sync');positionFeedback('同步请求已处理，请刷新并核对记录时间。');showToast('同步请求已处理，请核对持仓记录及更新时间');setLoading(btn,false);await refreshPositionsLive();}catch(e){positionFeedback('同步失败：'+e.message+'。原有记录已保留。',true);setLoading(btn,false);}}
+async function closePos(symbol,side,btn){const label=side==='long'?'多':'空';const size=btn.dataset.size;if(!await confirmAction({title:'确认平仓',detail:`${symbol} · ${label}单 · 当前显示数量 ${size} 张。将按服务端查询到的该方向持仓数量提交平仓；成交价以交易所结果为准。`,confirmText:'提交平仓',danger:true}))return;setLoading(btn,true);try{const data=await api('POST','/positions/close',{symbol,side});positionFeedback(data.message);showToast(data.message);setLoading(btn,false);await refreshPositionsLive();}catch(e){positionFeedback('平仓失败：'+e.message,true);setLoading(btn,false);}}
+</script><script src="/static/monitor.js?v=20261109-2"></script>{% endblock %}

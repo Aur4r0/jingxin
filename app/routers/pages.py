@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from urllib.parse import quote
 
-from fastapi import APIRouter, Request, Depends, Query, Form
+from fastapi import APIRouter, Request, Depends, Query, Form, HTTPException
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -66,6 +66,12 @@ def _fmt_bj_time(dt: datetime | None, fmt: str = "%m-%d %H:%M:%S") -> str:
     return bj.strftime(fmt)
 
 
+from app.ui_views import ui_number, ui_tone, utc_iso, position_pnl, execution_state
+
+templates.env.filters.update(ui_number=ui_number, ui_tone=ui_tone, utc_iso=utc_iso)
+templates.env.globals['execution_state'] = execution_state
+
+
 # ─── Page Routes ─────────────────────────────────────
 
 @router.get("/login")
@@ -115,10 +121,13 @@ def strategies_page(request: Request, db: Session = Depends(get_db)):
     for s in all_strategies:
         if not hasattr(s, '_symbols_cache'):
             s._symbols_cache = s.symbols  # uses the @property
+    from sqlalchemy import func
+    latest_ids = db.query(func.max(StrategyLog.id)).group_by(StrategyLog.strategy_id)
+    recent = db.query(StrategyLog).filter(StrategyLog.id.in_(latest_ids)).all()
     return templates.TemplateResponse("strategies.html", {
         "request": request,
         "active_page": "strategies",
-        "strategies": all_strategies,
+        "strategies": all_strategies, "recent_logs":{log.strategy_id:log for log in recent},
     })
 
 
@@ -180,16 +189,28 @@ def strategy_edit_page(strategy_id: int, request: Request, db: Session = Depends
 @router.get("/logs")
 def logs_page(
     request: Request,
-    strategy_id: int | None = None,
+    strategy_id: str | None = None,
     page: int = Query(1, ge=1),
     db: Session = Depends(get_db),
+    page_size: int = 10,
 ):
-    page_size = 20
+    if strategy_id == "":
+        strategy_id = None
+    elif strategy_id is not None:
+        try:
+            strategy_id = int(strategy_id)
+        except (ValueError, TypeError):
+            raise HTTPException(400, "策略筛选参数无效") from None
+    if page_size not in (10, 20, 50):
+        page_size = 10
     q = db.query(StrategyLog).order_by(StrategyLog.id.desc())
     if strategy_id:
         q = q.filter(StrategyLog.strategy_id == strategy_id)
     total = q.count()
     total_pages = max(1, math.ceil(total / page_size))
+    page = min(page, total_pages)
+    from urllib.parse import urlencode
+    link = lambda p: "/logs?" + urlencode(dict(page=p, page_size=page_size, **({"strategy_id":strategy_id} if strategy_id else {})))
     logs = q.offset((page - 1) * page_size).limit(page_size).all()
 
     strategies = db.query(Strategy).order_by(Strategy.id.desc()).all()
@@ -198,7 +219,8 @@ def logs_page(
     return templates.TemplateResponse("logs.html", {
         "request": request,
         "active_page": "logs",
-        "logs": logs,
+        "logs": logs, "total":total, "page_size":page_size,
+        "prev_url":link(max(1,page-1)), "next_url":link(min(total_pages,page+1)),
         "strategies": strategies,
         "strategy_names": strategy_names,
         "filter_strategy_id": strategy_id,
@@ -227,6 +249,8 @@ def positions_page(request: Request, db: Session = Depends(get_db)):
         for e in equity_data
     ])
 
+    from app.runtime_status import snapshot
+    position_time = max((p.updated_at for p in positions if p.updated_at), default=None)
     return templates.TemplateResponse("positions.html", {
         "request": request,
         "active_page": "positions",
@@ -234,7 +258,8 @@ def positions_page(request: Request, db: Session = Depends(get_db)):
         "strategy_names": strategy_names,
         "equity_data": equity_data,
         "equity_json": equity_json,
-        "is_simulated": is_simulated,
+        "is_simulated": is_simulated, "position_time":position_time,
+        "pnl":position_pnl(positions), "runtime":snapshot(),
     })
 
 
@@ -358,11 +383,13 @@ def overview_page(request: Request, db: Session = Depends(get_db)):
     strategies = db.query(Strategy).all()
     logs = db.query(StrategyLog).order_by(StrategyLog.created_at.desc()).limit(5).all()
     latest = snapshots[-1] if snapshots else None
+    from app.runtime_status import snapshot
     return templates.TemplateResponse("overview.html", {
         "request": request, "active_page": "overview", "latest": latest,
         "positions": positions, "strategy_count": len(strategies),
         "enabled_count": sum(bool(s.enabled) for s in strategies),
-        "pnl": sum(p.unrealized_pnl or 0 for p in positions),
+        "pnl": position_pnl(positions),
+        "runtime": snapshot(),
         "logs": logs, "strategy_names": {s.id: s.name for s in strategies},
         "chart_data": [{"time": s.timestamp.isoformat() + "Z", "equity": s.total_equity} for s in snapshots],
         "position_time": max((p.updated_at for p in positions if p.updated_at), default=None),

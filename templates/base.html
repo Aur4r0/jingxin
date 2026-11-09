@@ -17,6 +17,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="/static/app.css?v=20261106-1" rel="stylesheet">
   <link href="/static/minimal.css?v=20261106-1" rel="stylesheet">
+  {% if active_page != 'trades' %}<link href="/static/workspace.css?v=20261109-1" rel="stylesheet">{% endif %}
   {% block head %}{% endblock %}
 </head>
 <body>
@@ -32,7 +33,7 @@
   </aside>
   <div class="pp-workspace">
     <header class="pp-topbar"><div><span class="pp-environment" id="environmentLabel">交易环境 · 读取中</span></div><div class="d-flex align-items-center gap-3"><button class="btn btn-sm btn-outline-secondary" id="themeToggleBtn" aria-label="切换主题" type="button" onclick="toggleTheme()">主题</button><a href="/logout" class="text-secondary small">退出</a></div></header>
-    <div class="container-fluid pp-content">{% block content %}{% endblock %}</div>
+    <div class="container-fluid pp-content {{ 'jx' if active_page != 'trades' else '' }}">{% block content %}{% endblock %}</div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
@@ -66,6 +67,7 @@
       el.classList.toggle('pp-live', !config.okx_simulated);
     }).catch(() => { document.getElementById('environmentLabel').textContent = '交易环境 · 未知'; });
   </script>
+  {% if active_page != 'trades' %}<script src="/static/workspace.js?v=20261109-1"></script>{% endif %}
   {% block scripts %}{% endblock %}
 </body>
 </html>

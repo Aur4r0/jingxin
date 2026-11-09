@@ -5,13 +5,13 @@ savedEnvironment = simSwitch.checked;
 const secretNames = new Set(['okx_live_api_key','okx_live_secret_key','okx_live_passphrase','okx_sim_api_key','okx_sim_secret_key','okx_sim_passphrase','ai_default_api_key','tg_bot_token','binance_live_api_key','binance_live_secret_key','binance_sim_api_key','binance_sim_secret_key']);
 let revealOther = false;
 function toggleSimWarning(){
-  document.getElementById('simLabel').textContent = `待保存环境：${simSwitch.checked ? '模拟盘' : '实盘'}${simSwitch.checked !== savedEnvironment ? '（尚未生效）' : ''}`;
+  document.getElementById('simLabel').textContent = `${simSwitch.checked===savedEnvironment?'已保存环境':'待保存环境'}：${simSwitch.checked ? '模拟盘' : '实盘'}${simSwitch.checked !== savedEnvironment ? '（尚未生效）' : ''}`;
   document.getElementById('liveWarning').classList.toggle('d-none',simSwitch.checked);
   const sections = document.querySelectorAll('.credential-section');
   sections.forEach((section,index)=>{section.hidden = !revealOther && (simSwitch.checked ? index===0 : index===1);});
 }
-function showOtherCredentials(){revealOther=!revealOther;document.getElementById('otherCredentials').textContent=revealOther?'收起另一套账户凭据':'展开另一套账户凭据';toggleSimWarning();}
-function feedback(form,message,error=false){const el=form.querySelector(':scope > .settings-feedback');el.textContent=message;el.className=`settings-feedback ${error?'text-danger':'text-success'}`;el.setAttribute('role',error?'alert':'status');}
+function showOtherCredentials(){revealOther=!revealOther;document.getElementById('otherCredentials').setAttribute('aria-expanded',String(revealOther));document.getElementById('otherCredentials').textContent=revealOther?'收起另一套账户凭据':'展开另一套账户凭据';toggleSimWarning();}
+function feedback(form,message,error=false){const el=form.querySelector(':scope > .settings-feedback');el.textContent=message;el.className=`settings-feedback ${error?'text-danger':'text-success'}`;el.setAttribute('role',error?'alert':'status');if(!error){form.dataset.dirty='false';const state=form.querySelector('[data-save-state]');if(state)state.textContent='已保存 · 连接状态以测试结果为准';}}
 async function saveSection(event,form){
   event.preventDefault(); const button=form.querySelector('[type="submit"]');
   const payload={};for(const [key,value] of new FormData(form)){if(secretNames.has(key) && !value.trim())continue;payload[key]=value;}
@@ -24,7 +24,7 @@ async function saveSection(event,form){
   setLoading(button,true);
   try{
     const config=await api('PUT','/system/config',payload);
-    if(form.dataset.section==='account'){savedEnvironment=config.okx_simulated;toggleSimWarning();const label=document.getElementById('environmentLabel');label.textContent=config.okx_simulated?'OKX · 模拟盘':'OKX · 实盘';label.classList.toggle('pp-live',!config.okx_simulated);}
+    if(form.dataset.section==='account'){savedEnvironment=config.okx_simulated;document.getElementById('savedLiveWarning')?.classList.toggle('d-none',config.okx_simulated);toggleSimWarning();const label=document.getElementById('environmentLabel');label.textContent=config.okx_simulated?'OKX · 模拟盘':'OKX · 实盘';label.classList.toggle('pp-live',!config.okx_simulated);}
     form.querySelectorAll('input[type="password"]').forEach(input=>{if(input.value){input.value='';input.placeholder='已设置，留空保留';}});
     const summary=form.closest('details')?.querySelector('summary span');
     if(summary && form.dataset.section==='ai')summary.textContent=`${config.ai_default_provider} · ${config.ai_default_model} · 点击编辑`;

@@ -1,0 +1,8 @@
+{% macro heading(title, subtitle='', eyebrow='静心 / 工作台') -%}
+<header class="jx-heading"><div><span class="jx-eyebrow">{{ eyebrow }}</span><h1>{{ title }}</h1>{% if subtitle %}<p>{{ subtitle }}</p>{% endif %}</div><div class="jx-heading-actions">{{ caller() if caller is defined else '' }}</div></header>
+{%- endmacro %}
+{% macro empty(title, hint='') -%}<div class="jx-empty"><strong>{{ title }}</strong>{% if hint %}<p>{{ hint }}</p>{% endif %}</div>{%- endmacro %}
+{% macro number(value, digits=2, signed=false) -%}<span class="jx-number {{ value|ui_tone if signed else 'neutral' }}">{{ value|ui_number(digits,signed) }}</span>{%- endmacro %}
+{% macro status(label, kind='neutral') -%}<span class="jx-status {{ kind }}">{{ label }}</span>{%- endmacro %}
+{% macro monitor(seconds=30) -%}<div class="monitor-toolbar" data-monitor-interval="{{ seconds }}"><label class="monitor-toggle"><input id="monitorAuto" type="checkbox" checked> 自动刷新 · {{ seconds }} 秒</label><span id="monitorStatus" role="status" aria-live="polite">已显示本次页面数据</span><button id="monitorRefresh" type="button" class="btn btn-sm btn-outline-secondary">刷新数据</button></div><div id="monitorError" class="monitor-error" role="alert" hidden></div>{%- endmacro %}
+{% macro pager(page, pages, total, prev, next) -%}<nav class="jx-pagination" aria-label="记录分页"><span>共 {{ total }} 条 · {{ page }} / {{ pages }} 页</span><div>{% if page > 1 %}<a class="btn btn-sm btn-outline-secondary" href="{{ prev }}">上一页</a>{% else %}<button class="btn btn-sm btn-outline-secondary" disabled>上一页</button>{% endif %}{% if page < pages %}<a class="btn btn-sm btn-outline-secondary" href="{{ next }}">下一页</a>{% else %}<button class="btn btn-sm btn-outline-secondary" disabled>下一页</button>{% endif %}</div></nav>{%- endmacro %}

@@ -15,7 +15,7 @@
   }
   function drawChart(){if(window.renderTradeChart)window.renderTradeChart();const node=document.getElementById('monitorChartData');if(!node || !window.renderOverviewChart)return;const data=JSON.parse(node.textContent).map(d=>({time:d.time || d.timestamp+(d.timestamp.endsWith('Z')?'':'Z'),equity:d.equity ?? d.total_equity}));renderOverviewChart(data);}
   function schedule(){clearTimeout(timer);if(!disposed && auto.checked && !document.hidden)timer=setTimeout(()=>refresh(false),interval);}
-  function busy(){return !!document.querySelector('dialog[open],.modal.show,#monitorContent button:disabled') || document.querySelector('#monitorContent')?.contains(document.activeElement);}
+  function busy(){return !!document.querySelector('dialog[open],.modal.show,#monitorContent button[data-orig-text]:disabled,#syncFills:disabled,#syncBtn:disabled,#monitorContent details.jx-position-record[open],#monitorContent details.jx-log-record[open],#monitorContent details.jx-note[open],#monitorContent details.tdb-fill[open]') || document.querySelector('#monitorContent')?.contains(document.activeElement);}
   async function refresh(manual=false){
     if(inFlight || document.hidden || (!manual && busy())){schedule();return;}
     inFlight=true;button.disabled=true;status.textContent='正在读取最新页面数据…';controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),12000);

@@ -1,74 +1,17 @@
 {% extends "base.html" %}
-{% block title %}策略管理 - 静心{% endblock %}
-
+{% from "components/workspace.html" import heading, empty, number, status %}
+{% block title %}交易策略 - 静心{% endblock %}
 {% block content %}
 <nav class="pp-section-tabs" aria-label="页面分类"><a href="/strategies" aria-current="page">交易策略</a><a href="/prompt-templates">提示词模板</a></nav>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4><i class="bi bi-gear"></i> AI 策略管理</h4>
-  <a href="/strategies/new" class="btn btn-primary"><i class="bi bi-plus-lg"></i> 新建策略</a>
-</div>
-
-{% if not strategies %}
-<div class="text-center py-5 text-muted">
-  <i class="bi bi-inbox" style="font-size:3rem"></i>
-  <p class="mt-2">暂无策略，点击右上角创建</p>
-</div>
-{% else %}
-<div class="row">
-  {% for s in strategies %}
-  <div class="col-md-6 col-xl-4 mb-3">
-    <div class="card card-strategy h-100 {{ 'border-success' if s.enabled else 'border-secondary' }}">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <strong>{{ s.name }}</strong>
-        <span class="badge {{ 'bg-light text-success' if s.enabled else 'bg-secondary' }}">
-          {{ '已启用' if s.enabled else '已暂停' }}
-        </span>
-      </div>
-      <div class="card-body">
-        <div class="mb-2">
-          <small class="text-muted">AI模型:</small>
-          <span class="ms-1">{{ s.ai_provider or '全局默认' }} / {{ s.ai_model or '默认' }}</span>
-        </div>
-        <div class="mb-2">
-          <small class="text-muted">交易对:</small>
-          <div>
-            {% for sym in s.symbols %}
-            <span class="badge bg-info me-1 mb-1">{{ sym }}</span>
-            {% else %}
-            <span class="text-muted">未配置</span>
-            {% endfor %}
-          </div>
-        </div>
-        <div class="row text-center mt-2">
-          <div class="col-3"><small class="text-muted d-block">周期</small><strong>{{ s.interval_minutes }}分</strong></div>
-          <div class="col-3"><small class="text-muted d-block">杠杆</small><strong>{{ s.leverage }}x</strong></div>
-          <div class="col-3"><small class="text-muted d-block">开仓名义金额</small><strong>{{ s.position_usdt }} U</strong></div>
-          <div class="col-3"><small class="text-muted d-block">止盈止损</small><strong class="text-info"><i class="bi bi-robot"></i> AI</strong></div>
-        </div>
-      </div>
-      <div class="card-footer d-flex gap-2">
-        <button class="btn btn-sm {{ 'btn-warning' if s.enabled else 'btn-success' }}"
-                data-enabled="{{ 'true' if s.enabled else 'false' }}" data-name="{{ s.name }}" onclick="toggleStrategy({{ s.id }}, this)">
-          <i class="bi {{ 'bi-pause' if s.enabled else 'bi-play' }}"></i>
-          {{ '暂停' if s.enabled else '启动' }}
-        </button>
-        <button class="btn btn-sm btn-outline-primary" data-name="{{ s.name }}" onclick="runNow({{ s.id }}, this)">
-          <i class="bi bi-lightning"></i> 立即执行
-        </button>
-        <a href="/strategies/{{ s.id }}/edit" class="btn btn-sm btn-outline-secondary">
-          <i class="bi bi-pencil"></i> 编辑
-        </a>
-        <button class="btn btn-sm btn-outline-danger" data-name="{{ s.name }}" aria-label="删除策略" onclick="deleteStrategy({{ s.id }}, this.dataset.name)">
-          <i class="bi bi-trash"></i>
-        </button>
-      </div>
-    </div>
-  </div>
-  {% endfor %}
-</div>
-{% endif %}
+{% call heading('交易策略','先查看运行状态，再编辑或执行策略','策略 / 管理') %}<a href="/strategies/new" class="btn btn-sm btn-primary">新建策略</a>{% endcall %}
+<p class="jx-caption mb-3">启用、立即执行均可能提交交易订单；暂停不会自动平仓。交易相关操作保留环境核对和确认。</p>
+{% for s in strategies %}{% set latest=recent_logs.get(s.id) %}{% set state=execution_state(latest) %}
+<article class="jx-panel jx-strategy-card"><div class="jx-section-head"><h2>{{ s.name }}</h2><div class="jx-actions">{{ status('AI 决策' if s.use_ai is not sameas false else '规则决策') }}{{ status('已启用' if s.enabled else '已暂停','positive' if s.enabled else 'neutral') }}</div></div>
+<div class="jx-strategy-meta"><div><span>交易对</span><strong>{{ s.symbols|length }} 个{{ ' · 扫描已启用' if s.scan_enabled else '' }}</strong></div><div><span>执行间隔</span><strong>{{ s.interval_minutes }} 分钟</strong></div><div><span>最近执行</span><strong>{{ latest.created_at|bj_time if latest else '暂无执行' }}</strong></div><div><span>执行结果</span>{{ status(state.label,state.kind) }}</div></div>
+{% if latest and latest.error_message %}<p class="jx-alert" role="alert">{{ latest.error_message }}</p>{% endif %}
+<div class="jx-strategy-footer"><details class="jx-note"><summary>策略参数与执行摘要</summary><dl class="jx-info-grid"><div><dt>手动交易对</dt><dd>{{ s.symbols|join('、') or '未配置' }}</dd></div><div><dt>名义金额预算</dt><dd>{{ s.position_usdt }} USDT</dd></div><div><dt>杠杆</dt><dd>{{ s.leverage }}x</dd></div><div><dt>决策模型</dt><dd>{{ (s.ai_provider or '全局默认') ~ ' / ' ~ (s.ai_model or '默认') if s.use_ai is not sameas false else '规则模式，不调用 AI' }}</dd></div><div><dt>最近交易对</dt><dd>{{ latest.symbol if latest else '—' }}</dd></div><div><dt>执行摘要</dt><dd>{{ state.description }}</dd></div></dl><p>名义金额不是保证金或基础币数量。止盈止损由现有决策模式计算；本页不推算策略胜率或收益。</p></details><div class="jx-actions"><a class="btn btn-sm btn-outline-secondary" href="/strategies/{{ s.id }}/edit">编辑</a><button class="btn btn-sm btn-outline-secondary" data-enabled="{{ 'true' if s.enabled else 'false' }}" data-name="{{ s.name }}" onclick="toggleStrategy({{ s.id }},this)">{{ '暂停' if s.enabled else '启用' }}</button><button class="btn btn-sm btn-outline-secondary" data-name="{{ s.name }}" onclick="runNow({{ s.id }},this)">立即执行</button><button class="btn btn-sm btn-outline-danger" data-name="{{ s.name }}" aria-label="删除策略" onclick="deleteStrategy({{ s.id }},this.dataset.name)">删除</button></div></div></article>
+{% else %}<section class="jx-panel">{{ empty('还没有策略','创建后默认暂停，检查配置后再人工启用。') }}</section>{% endfor %}
 {% endblock %}
-
 {% block scripts %}
 <script>
 async function toggleStrategy(id, btn) {

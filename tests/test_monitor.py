@@ -16,7 +16,7 @@ class MonitorTests(unittest.TestCase):
             html=response.text
             self.assertEqual(html.count('id="monitorContent"'),1)
             self.assertLess(html.index('id="monitorStatus"'),html.index('id="monitorContent"'))
-            self.assertIn('/static/monitor.js?v=20261106-1',html)
+            self.assertRegex(html,r'/static/monitor\.js\?v=202611(?:06-1|09-2)')
             self.assertNotIn('setInterval(refreshPositionsLive',html)
             parser=Scripts();parser.feed(html)
             # application/json 数据块由 DOM 单独读取，不作为代码检查。

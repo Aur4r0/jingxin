@@ -1,23 +1,12 @@
 {% extends "base.html" %}
 {% block title %}策略模板管理 - 静心{% endblock %}
 
+{% from "components/workspace.html" import heading %}
 {% block content %}
 <nav class="pp-section-tabs" aria-label="页面分类"><a href="/strategies">交易策略</a><a href="/prompt-templates" aria-current="page">提示词模板</a></nav>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4><i class="bi bi-file-earmark-text"></i> 策略模板管理</h4>
-  <button class="btn btn-primary btn-sm" onclick="openEditor()">
-    <i class="bi bi-plus-lg"></i> 新建模板
-  </button>
-</div>
-
-<!-- 模板列表 -->
-<div class="row" id="templateList">
-  <div class="col-12 text-center text-muted py-5" id="emptyHint">
-    <i class="bi bi-inbox" style="font-size:2rem"></i>
-    <p class="mt-2">暂无模板，点击右上角新建</p>
-  </div>
-</div>
-
+{% call heading('提示词模板','管理可复用的决策文本，修改前请核对实际策略是否使用该内容','策略 / 模板') %}<button type="button" class="btn btn-sm btn-primary" onclick="openEditor()">新建模板</button>{% endcall %}
+<div id="templateLoadError" class="jx-inline-feedback negative" role="alert"></div>
+<div class="jx-template-list" id="templateList"><div class="jx-empty" id="emptyHint"><strong>正在读取模板…</strong><p>模板内容只在主动预览或编辑时展开。</p></div></div>
 <!-- 编辑弹窗 -->
 <div class="modal fade" id="editorModal" tabindex="-1">
   <div class="modal-dialog modal-xl">
@@ -27,7 +16,7 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <input type="hidden" id="editId">
+        <div id="templateSaveError" class="jx-inline-feedback negative" role="alert"></div><input type="hidden" id="editId">
         <div class="row mb-3">
           <div class="col-md-6">
             <label class="form-label">模板名称 *</label>
@@ -97,59 +86,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function loadTemplates() {
   try {
+    document.getElementById('templateLoadError').textContent='';
     templates = await api('GET', '/prompt-templates');
     renderList();
   } catch (e) {
-    showToast('加载模板失败: ' + e.message, 'error');
+    document.getElementById('templateLoadError').textContent='模板读取失败：'+e.message+'。已有内容保留。';
+    const empty=document.getElementById('emptyHint');if(!templates.length){empty.querySelector('strong').textContent='模板暂时无法读取';empty.querySelector('p').textContent='请检查登录和网络后刷新，不能据此判断没有模板。';}
   }
 }
 
 function renderList() {
-  const container = document.getElementById('templateList');
-  const empty = document.getElementById('emptyHint');
-
-  // 清除除 emptyHint 以外的内容
-  container.querySelectorAll('.tpl-card').forEach(el => el.remove());
-
-  if (templates.length === 0) {
-    empty.style.display = '';
-    return;
-  }
-  empty.style.display = 'none';
-
-  templates.forEach(t => {
-    const col = document.createElement('div');
-    col.className = 'col-lg-4 col-md-6 mb-3 tpl-card';
-    const preview = t.content.substring(0, 120).replace(/</g, '&lt;') + (t.content.length > 120 ? '...' : '');
-    const time = t.updated_at ? new Date(t.updated_at).toLocaleString('zh-CN') : '-';
-    col.innerHTML = `
-      <div class="card h-100 ${t.is_default ? 'border-primary' : ''}">
-        <div class="card-header d-flex justify-content-between align-items-center py-2">
-          <span class="fw-bold text-truncate" style="max-width:70%">
-            ${escapeHtml(t.name)}
-            ${t.is_default ? '<span class="badge bg-primary ms-1">默认</span>' : ''}
-          </span>
-          <div class="btn-group btn-group-sm">
-            <button class="btn btn-outline-secondary" title="预览" onclick="previewTpl(${t.id})">
-              <i class="bi bi-eye"></i>
-            </button>
-            <button class="btn btn-outline-primary" title="编辑" onclick="editTpl(${t.id})">
-              <i class="bi bi-pencil"></i>
-            </button>
-            <button class="btn btn-outline-danger" title="删除" onclick="deleteTpl(${t.id}, '${escapeHtml(t.name)}')">
-              <i class="bi bi-trash"></i>
-            </button>
-          </div>
-        </div>
-        <div class="card-body py-2" style="cursor:pointer" onclick="previewTpl(${t.id})">
-          <small class="text-muted">${escapeHtml(t.description || '无描述')}</small>
-          <pre class="mt-2 mb-0 text-muted" style="font-size:0.75rem;max-height:80px;overflow:hidden;white-space:pre-wrap">${preview}</pre>
-        </div>
-        <div class="card-footer py-1 text-muted" style="font-size:0.75rem">
-          更新: ${time}
-        </div>
-      </div>`;
-    container.appendChild(col);
+  const container=document.getElementById('templateList');
+  const empty=document.getElementById('emptyHint');
+  container.querySelectorAll('.tpl-card').forEach(el=>el.remove());
+  empty.style.display=templates.length?'none':'';
+  if(!templates.length){empty.querySelector('strong').textContent='暂无提示词模板';empty.querySelector('p').textContent='可新建模板；不会自动修改已有策略内容。';}
+  templates.forEach(t=>{
+    const card=document.createElement('article');card.className='jx-panel jx-template-card tpl-card';
+    const header=document.createElement('div');header.className='jx-section-head';
+    const title=document.createElement('h2');title.textContent=t.name;
+    if(t.is_default){const badge=document.createElement('span');badge.className='jx-status';badge.textContent='默认模板';title.append(' ',badge);}
+    const actions=document.createElement('div');actions.className='jx-actions';
+    for(const [label,handler] of [['预览',()=>previewTpl(t.id)],['编辑',()=>editTpl(t.id)],['删除',()=>deleteTpl(t.id,t.name)]]){const button=document.createElement('button');button.type='button';button.className='btn btn-sm '+(label==='删除'?'btn-outline-danger':'btn-outline-secondary');button.textContent=label;button.addEventListener('click',handler);actions.append(button);}
+    header.append(title,actions);
+    const description=document.createElement('p');description.className='jx-caption';description.textContent=t.description||'暂无描述';
+    const footer=document.createElement('small');footer.className='jx-muted';
+    const iso=t.updated_at?(t.updated_at.endsWith('Z')||/[+-]\d{2}:\d{2}$/.test(t.updated_at)?t.updated_at:t.updated_at+'Z'):null;
+    footer.textContent='更新 '+(iso?new Date(iso).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未知')+' · 北京时间';
+    card.append(header,description,footer);container.append(card);
   });
 }
 
@@ -160,6 +124,7 @@ function openEditor(tpl) {
   document.getElementById('editContent').value = tpl ? tpl.content : '';
   document.getElementById('editDefault').checked = tpl ? tpl.is_default : false;
   document.getElementById('editorTitle').textContent = tpl ? '编辑模板' : '新建模板';
+  document.getElementById('templateSaveError').textContent='';
   editorModal.show();
 }
 
@@ -202,7 +167,7 @@ async function saveTemplate() {
     editorModal.hide();
     await loadTemplates();
   } catch (e) {
-    showToast('保存失败: ' + e.message, 'error');
+    document.getElementById('templateSaveError').textContent='保存失败：'+e.message+'。输入内容已保留。';
   } finally {
     setLoading(btn, false);
   }

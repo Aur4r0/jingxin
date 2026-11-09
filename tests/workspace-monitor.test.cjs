@@ -1,0 +1,7 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const elements={};function el(id){return elements[id]??={checked:true,hidden:true,disabled:false,textContent:'',dataset:{monitorInterval:'15'},addEventListener(){},contains(){return false;},classList:{toggle(){}}};}
+let scheduled,fetches=0,reading=false,action=false;
+const document={hidden:false,activeElement:null,querySelector(selector){if(selector==='[data-monitor-interval]')return el('toolbar');if(selector==='#monitorContent')return el('monitorContent');if(selector.includes('details.jx-log-record[open]')&&reading)return {};if(selector.includes('button[data-orig-text]:disabled')&&action)return {};return null;},querySelectorAll(){return[];},getElementById(id){return id==='monitorChartData'?null:el(id);},addEventListener(){}};
+const context={document,window:{addEventListener(){}},localStorage:{getItem(){return null},setItem(){}},location:{pathname:'/logs',search:''},Date,Number,JSON,URL,AbortController,setTimeout(cb){scheduled=cb;return 1},clearTimeout(){},fetch:async()=>{fetches++;throw Error('test network failure')}};
+vm.runInNewContext(fs.readFileSync('static/monitor.js','utf8'),context);
+(async()=>{reading=true;await scheduled();assert.equal(fetches,0,'阅读展开详情时不自动刷新');reading=false;action=true;await scheduled();assert.equal(fetches,0,'操作处理中不自动刷新');action=false;await scheduled();assert.equal(fetches,1,'无活动时正常刷新，分页禁用按钮不阻断刷新');assert.equal(el('monitorError').hidden,false);console.log('阅读与操作保护通过');})().catch(e=>{console.error(e);process.exitCode=1});
