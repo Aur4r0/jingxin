@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Float, Boolean, Text, DateTime,
-    ForeignKey, create_engine, event
+    ForeignKey, create_engine, event, UniqueConstraint
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -171,11 +171,35 @@ class Trade(Base):
 
     pnl = Column(Float, nullable=True)  # realized P&L for close trades
     fee = Column(Float, default=0.0)
-    status = Column(String(20), default="filled")  # filled / cancelled / failed
+    status = Column(String(20), default="submitted")  # 订单确认不代表已成交
 
     created_at = Column(DateTime, default=datetime.utcnow)
 
     strategy = relationship("Strategy", back_populates="trades")
+
+
+class ExecutionFill(Base):
+    """交易所原始成交账本，与旧订单记录分离，避免重复统计。"""
+    __tablename__ = "execution_fills"
+    __table_args__ = (UniqueConstraint("environment", "account_key", "symbol", "order_id", "fill_id", name="uq_execution_fill"),)
+    id = Column(Integer, primary_key=True)
+    environment = Column(String(10), nullable=False)
+    account_key = Column(String(64), nullable=False, index=True)
+    symbol = Column(String(50), nullable=False)
+    order_id = Column(String(100), nullable=False)
+    fill_id = Column(String(100), nullable=False)
+    bill_id = Column(String(100), default="")
+    side = Column(String(10), nullable=False)
+    position_side = Column(String(10), default="")
+    subtype = Column(String(20), default="")
+    price = Column(String(80), nullable=False)
+    contracts = Column(String(80), nullable=False)
+    realized_pnl = Column(String(80), nullable=True)
+    fee_signed = Column(String(80), nullable=True)
+    fee_currency = Column(String(20), default="")
+    filled_at = Column(DateTime, nullable=False)
+    # 旧订单未保存账户环境，不能仅凭 symbol 将成交归入某策略。
+    source = Column(String(30), default="okx_fills_history")
 
 
 class Position(Base):

@@ -243,36 +243,52 @@ def trades_page(
     request: Request,
     strategy_id: int | None = None,
     page: int = Query(1, ge=1),
+    source: str = "fills",
     db: Session = Depends(get_db),
 ):
+    from app.fill_ledger import account_key, fill_summary, fill_view
+    from app.models import ExecutionFill
+    from app.runtime_status import snapshot
     page_size = 50
-    q = db.query(Trade).order_by(Trade.id.desc())
+    if source not in ("fills", "legacy"):
+        source = "fills"
+    error = ""
+    views, summary = [], None
+    legacy_q = db.query(Trade)
     if strategy_id:
-        q = q.filter(Trade.strategy_id == strategy_id)
-    total = q.count()
-    total_pages = max(1, math.ceil(total / page_size))
-    trades = q.offset((page - 1) * page_size).limit(page_size).all()
-
-    total_pnl = sum(t.pnl or 0 for t in trades)
-    win_count = sum(1 for t in trades if t.pnl and t.pnl > 0)
-    loss_count = sum(1 for t in trades if t.pnl and t.pnl < 0)
-
-    strategies = db.query(Strategy).order_by(Strategy.id.desc()).all()
-    strategy_names = _strategy_name_map(db)
-
+        legacy_q = legacy_q.filter(Trade.strategy_id == strategy_id)
+    legacy_count = legacy_q.count()
+    if source == "legacy":
+        total = legacy_count
+        trades = legacy_q.order_by(Trade.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    else:
+        trades = []
+        try:
+            scope = account_key(db.query(SystemConfig).first())
+            q = db.query(ExecutionFill).filter(ExecutionFill.environment == "demo", ExecutionFill.account_key == scope)
+            # 当前成交不能可靠归属策略，不把账户级数据当作策略盈亏。
+            if strategy_id:
+                error = "成交尚未可靠归属策略；请清除策略筛选查看账户成交，旧记录可在另一标签查看"
+                total = 0
+            else:
+                total = q.count()
+                summary = fill_summary(q.yield_per(500)) if total else None
+                rows = q.order_by(ExecutionFill.filled_at.desc(), ExecutionFill.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+                views = [fill_view(row) for row in rows]
+        except ValueError as exc:
+            error = str(exc)
+            total = 0
+        except RuntimeError:
+            error = "无法解密模拟盘配置，请检查配套加密密钥"
+            total = 0
     return templates.TemplateResponse("trades.html", {
-        "request": request,
-        "active_page": "trades",
-        "trades": trades,
-        "strategies": strategies,
-        "strategy_names": strategy_names,
-        "filter_strategy_id": strategy_id,
-        "page": page,
-        "total_pages": total_pages,
-        "total": total,
-        "total_pnl": total_pnl,
-        "win_count": win_count,
-        "loss_count": loss_count,
+        "request": request, "active_page": "trades", "trades": trades, "fills": views,
+        "source": source, "summary": summary, "ledger_error": error,
+        "sync_status": snapshot().get("fills", {}),
+        "strategies": db.query(Strategy).order_by(Strategy.id.desc()).all(),
+        "strategy_names": _strategy_name_map(db), "filter_strategy_id": strategy_id,
+        "page": page, "total_pages": max(1, math.ceil(total / page_size)),
+        "total": total, "legacy_count": legacy_count,
     })
 
 

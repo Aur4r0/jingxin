@@ -81,6 +81,24 @@ def trades_count(strategy_id: int | None = None, db: Session = Depends(get_db)):
     return {"count": q.count()}
 
 
+@router.post("/trades/sync-fills")
+def sync_fills_now(db: Session = Depends(get_db)):
+    from app.fill_ledger import sync_demo_fills
+    from app.runtime_status import record
+    try:
+        result = sync_demo_fills(db)
+        record("fills", True, result["message"])
+        return result
+    except ValueError as exc:
+        record("fills", False, str(exc))
+        raise HTTPException(409, str(exc)) from None
+    except Exception:
+        db.rollback()
+        message = "成交同步失败，本地历史已保留；请检查模拟盘凭据、网络及接口状态"
+        record("fills", False, message)
+        raise HTTPException(502, message) from None
+
+
 # ──────────── Positions ────────────
 
 @router.get("/positions", response_model=list[PositionOut])
@@ -166,10 +184,6 @@ def manual_close(data: ManualCloseRequest, db: Session = Depends(get_db)):
         if strategy_id is not None:
             close_price = _to_float(order_dict.get("price"), 0.0) or _to_float(order_dict.get("average"), 0.0) or entry_price
 
-            if data.side == "long":
-                pnl = (close_price - entry_price) * amount
-            else:
-                pnl = (entry_price - close_price) * amount
 
             trade = Trade(
                 strategy_id=strategy_id,
@@ -179,7 +193,8 @@ def manual_close(data: ManualCloseRequest, db: Session = Depends(get_db)):
                 price=close_price,
                 quantity=amount,
                 order_id=order_dict.get("id", ""),
-                pnl=round(pnl, 4),
+                pnl=None,
+                status="submitted",
                 fee=_fee_cost(order_dict),
             )
             db.add(trade)
@@ -191,7 +206,7 @@ def manual_close(data: ManualCloseRequest, db: Session = Depends(get_db)):
         # Sync positions after close
         sync_positions()
         return {
-            "message": f"已平仓 {data.symbol} {data.side}",
+            "message": f"已提交平仓请求 {data.symbol} {data.side}，成交结果以成交同步为准",
             "order_id": order_dict.get("id", ""),
             "trade_recorded": trade_recorded,
             "warning": warning,

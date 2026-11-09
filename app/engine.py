@@ -288,6 +288,10 @@ def reload_all_jobs():
             max_instances=1,
         )
 
+    if not scheduler.get_job("sync_fills"):
+        scheduler.add_job(sync_fills_job, IntervalTrigger(minutes=2), id="sync_fills",
+                          replace_existing=True, max_instances=1)
+
     # Add equity snapshot job (every 5 minutes)
     if not scheduler.get_job("equity_snapshot"):
         scheduler.add_job(
@@ -694,7 +698,8 @@ def _execute_open(db, strategy: Strategy, symbol: str, side: str,
                     price=current_price,
                     quantity=p_contracts,
                     order_id=close_order_dict.get("id", ""),
-                    pnl=_to_float(_as_dict(close_order_dict.get("info")).get("pnl"), 0.0),
+                    pnl=None,
+                    status="submitted",
                     fee=_fee_cost(close_order_dict),
                 )
                 db.add(trade)
@@ -865,12 +870,7 @@ def _execute_close(db, strategy: Strategy, symbol: str, side: str,
     log.order_placed = True
     log.order_id = order_dict.get("id", "")
 
-    entry_price = float(target_pos.get("entryPrice", 0))
-    close_price = _to_float(order_dict.get("price"), 0.0) or _to_float(target_pos.get("markPrice"), 0.0)
-    if side == "long":
-        pnl = (close_price - entry_price) * amount
-    else:
-        pnl = (entry_price - close_price) * amount
+    close_price = _to_float(order_dict.get("average"), 0.0) or _to_float(order_dict.get("price"), 0.0)
 
     trade = Trade(
         strategy_id=strategy.id,
@@ -880,13 +880,14 @@ def _execute_close(db, strategy: Strategy, symbol: str, side: str,
         price=close_price,
         quantity=amount,
         order_id=order_dict.get("id", ""),
-        pnl=round(pnl, 4),
+        pnl=None,
+        status="submitted",
         fee=_fee_cost(order_dict),
     )
     db.add(trade)
     db.commit()
 
-    logger.info(f"Closed {side} {symbol} qty={amount} pnl={pnl:.4f}")
+    logger.info(f"Submitted close {side} {symbol} qty={amount}; awaiting fills")
 
 
 def sync_positions():
@@ -961,5 +962,24 @@ def record_equity_snapshot():
     except Exception as e:
         logger.error(f"Equity snapshot error: {e}")
         db.rollback()
+    finally:
+        db.close()
+
+
+def sync_fills_job():
+    from app.fill_ledger import sync_demo_fills
+    from app.runtime_status import record
+    db = SessionLocal()
+    try:
+        from app.models import SystemConfig
+        cfg = db.query(SystemConfig).first()
+        if cfg is None or not cfg.okx_simulated:
+            record('fills', False, '成交同步仅支持模拟盘，当前未运行')
+            return
+        result = sync_demo_fills(db)
+        record('fills', True, result['message'])
+    except Exception:
+        db.rollback()
+        record('fills', False, '成交同步失败，已保留本地历史；请检查模拟盘配置和连接')
     finally:
         db.close()

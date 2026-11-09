@@ -1,116 +1,32 @@
 {% extends "base.html" %}
-{% block title %}交易记录 - 静心{% endblock %}
-
+{% block title %}历史交易 - 静心{% endblock %}
 {% block content %}
-<div class="monitor-toolbar" data-monitor-interval="30"><label class="monitor-toggle"><input id="monitorAuto" type="checkbox" checked> 自动刷新 · 30 秒</label><span id="monitorStatus" role="status" aria-live="polite">已显示本次页面数据</span><button id="monitorRefresh" type="button" class="btn btn-sm btn-outline-secondary">刷新数据</button></div><div id="monitorError" class="monitor-error" role="alert" hidden></div><div id="monitorContent">
+<div class="monitor-toolbar" data-monitor-interval="30"><label class="monitor-toggle"><input id="monitorAuto" type="checkbox" checked> 自动刷新 · 30 秒</label><span id="monitorStatus" role="status" aria-live="polite">已显示本次页面数据</span><button id="monitorRefresh" type="button" class="btn btn-sm btn-outline-secondary">刷新数据</button></div><div id="monitorError" class="monitor-error" role="alert" hidden></div>
+<div id="monitorContent">
 <nav class="pp-section-tabs" aria-label="页面分类"><a href="/positions">当前持仓</a><a href="/trades" aria-current="page">历史交易</a></nav>
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h4><i class="bi bi-arrow-left-right"></i> 交易记录</h4>
-  <form class="d-flex gap-2" method="get" action="/trades">
-    <select name="strategy_id" class="form-select form-select-sm" style="width:200px" onchange="this.form.submit()">
-      <option value="">全部策略</option>
-      {% for s in strategies %}
-      <option value="{{ s.id }}" {{ 'selected' if filter_strategy_id == s.id else '' }}>{{ s.name }}</option>
-      {% endfor %}
-    </select>
-  </form>
-</div>
-
-{% if not trades %}
-<div class="text-center py-5 text-muted">
-  <i class="bi bi-inbox" style="font-size:3rem"></i>
-  <p class="mt-2">暂无交易记录</p>
-</div>
-{% else %}
-<!-- Summary -->
+<div class="d-flex justify-content-between align-items-center mb-3"><h4>历史交易</h4><button id="syncFills" class="btn btn-outline-primary" type="button">同步模拟盘成交</button></div>
+<nav class="pp-section-tabs"><a href="/trades" {% if source == 'fills' %}aria-current="page"{% endif %}>交易所成交</a><a href="/trades?source=legacy" {% if source == 'legacy' %}aria-current="page"{% endif %}>旧订单记录 · {{ legacy_count }}</a></nav>
+{% if ledger_error %}<p class="alert alert-warning">{{ ledger_error }}</p>{% endif %}
+<p class="text-muted">{% if sync_status %}上次成交同步：{{ sync_status.checked_at }} · {{ sync_status.message }}{% else %}尚无本次运行的成交同步结果，点击同步获取最近7天记录。{% endif %}</p>
+{% if source == 'fills' %}
+<p class="text-muted">当前模拟盘 API 配置下的已同步 USDT 永续成交，按成交明细统计，不等于完整开平仓交易。含人工及保护单成交，暂未归属策略；换 API Key 后需重新同步。未平仓浮动盈亏请到当前持仓查看。</p>
 <div class="row mb-3">
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body py-2">
-        <small class="text-muted">总交易数</small>
-        <h5>{{ total }}</h5>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body py-2">
-        <small class="text-muted">本页盈亏</small>
-        <h5 class="{{ 'text-success' if total_pnl >= 0 else 'text-danger' }}">
-          {{ '+' if total_pnl >= 0 else '' }}{{ '%.4f'|format(total_pnl) }} USDT
-        </h5>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body py-2">
-        <small class="text-muted">本页盈利笔数</small>
-        <h5 class="text-success">{{ win_count }}</h5>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="card text-center">
-      <div class="card-body py-2">
-        <small class="text-muted">本页亏损笔数</small>
-        <h5 class="text-danger">{{ loss_count }}</h5>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="table-responsive">
-  <table class="table table-hover table-sm">
-    <thead class="table-dark">
-      <tr>
-        <th>时间</th>
-        <th>交易对</th>
-        <th>方向</th>
-        <th>操作</th>
-        <th>价格</th>
-        <th>数量</th>
-        <th>盈亏</th>
-        <th>手续费</th>
-        <th>策略</th>
-        <th>订单ID</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in trades %}
-      <tr>
-        <td><small>{{ t.created_at|bj_time }}</small></td>
-        <td><strong>{{ t.symbol }}</strong></td>
-        <td><span class="badge {{ 'bg-success' if t.side == 'long' else 'bg-danger' }}">{{ '多' if t.side == 'long' else '空' }}</span></td>
-        <td><span class="badge {{ 'bg-primary' if t.action == 'open' else 'bg-warning text-dark' }}">{{ '开仓' if t.action == 'open' else '平仓' }}</span></td>
-        <td>{{ t.price }}</td>
-        <td>{{ t.quantity }}</td>
-        <td class="{{ 'text-success' if (t.pnl or 0) >= 0 else 'text-danger' }}">
-          {% if t.pnl is not none %}{{ '+' if t.pnl >= 0 else '' }}{{ '%.4f'|format(t.pnl) }}{% else %}-{% endif %}
-        </td>
-        <td>{{ '%.4f'|format(t.fee) if t.fee else '0' }}</td>
-        <td><span class="badge bg-secondary">{{ strategy_names.get(t.strategy_id, '#' ~ t.strategy_id) }}</span></td>
-        <td><small class="text-muted">{{ t.order_id[:12] if t.order_id else '-' }}</small></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<!-- Pagination -->
-<nav>
-  <ul class="pagination pagination-sm justify-content-center">
-    <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
-      <a class="page-link" href="?page={{ page - 1 }}{{ '&strategy_id=' ~ filter_strategy_id if filter_strategy_id else '' }}">上一页</a>
-    </li>
-    <li class="page-item disabled"><span class="page-link">{{ page }} / {{ total_pages }}</span></li>
-    <li class="page-item {{ 'disabled' if page >= total_pages else '' }}">
-      <a class="page-link" href="?page={{ page + 1 }}{{ '&strategy_id=' ~ filter_strategy_id if filter_strategy_id else '' }}">下一页</a>
-    </li>
-  </ul>
-</nav>
+<div class="col-md-3"><div class="card text-center"><div class="card-body"><small>已同步成交笔数 · 全部页</small><h5>{{ total }}</h5></div></div></div>
+{% for title, value in [('已实现盈亏 · USDT', summary.gross if summary else none), ('交易费用净支出 · USDT', -summary.fees_signed if summary and summary.fees_signed is not none else none), ('净交易盈亏 · USDT', summary.net if summary else none)] %}
+<div class="col-md-3"><div class="card text-center"><div class="card-body"><small>{{ title }}</small><h5>{% if value is not none %}{{ '%+.4f'|format(value) }}{% else %}待同步 / 数据不全{% endif %}</h5></div></div></div>
+{% endfor %}</div>
+<p class="form-text">总额覆盖当前账户全部已入库成交，不受分页影响，不含资金费，不等于账户总收益。费用净支出为扣费减返佣。开仓尚未结算价格盈亏，但本次成交已产生的费用会计入净交易盈亏。</p>
+{% if summary and (summary.pnl_unknown or summary.fee_unknown) %}<p class="alert alert-warning">有 {{ summary.pnl_unknown }} 笔盈亏缺失、{{ summary.fee_unknown }} 笔费用缺失或非 USDT。完整总额暂不显示，避免把未知值当作 0。</p>{% endif %}
+<div class="table-responsive"><table class="table table-hover table-sm"><thead><tr><th>成交时间</th><th>合约</th><th>操作</th><th>实际成交价</th><th>成交张数</th><th>已实现盈亏 USDT</th><th>费用原值 / 币种</th><th>本次成交净盈亏 USDT</th><th>订单 ID / 成交 ID</th></tr></thead><tbody>
+{% for v in fills %}{% set f = v.record %}<tr><td>{{ f.filled_at|bj_time }}</td><td>{{ f.symbol }}</td><td>{{ v.action }}</td><td>{{ f.price }}</td><td>{{ f.contracts }}</td><td>{% if v.pnl is not none %}{{ '%+.4f'|format(v.pnl) }}{% else %}待核实{% endif %}</td><td>{% if v.fee is not none %}{{ '%+.6f'|format(v.fee) }} {{ f.fee_currency or '币种未知' }}{% else %}待核实{% endif %}</td><td>{% if v.net is not none %}{{ '%+.4f'|format(v.net) }}{% else %}待核实{% endif %}</td><td><small>{{ f.order_id }}<br>{{ f.fill_id }}</small></td></tr>
+{% else %}<tr><td colspan="9" class="text-center py-4">暂无已同步成交，请先同步。空列表不代表交易所没有历史交易。</td></tr>{% endfor %}</tbody></table></div>
+<p class="form-text">费用原值遵循交易所符号：负数扣费，正数返佣。数据来自 OKX fills，不使用信号价或旧订单估算补算。</p>
+{% else %}
+<p class="alert alert-warning">旧订单记录不是成交账本。历史价格、数量、手续费及盈亏未逐笔核实，不参与盈亏统计，也不再把默认 filled 状态当作成交证明。</p>
+<form method="get" action="/trades" class="mb-3"><input type="hidden" name="source" value="legacy"><select name="strategy_id" class="form-select" onchange="this.form.submit()"><option value="">全部策略</option>{% for s in strategies %}<option value="{{ s.id }}" {{ 'selected' if filter_strategy_id == s.id else '' }}>{{ s.name }}</option>{% endfor %}</select></form>
+<div class="table-responsive"><table class="table table-sm"><thead><tr><th>记录时间</th><th>合约</th><th>操作</th><th>旧记录价格 / 张数</th><th>成交与盈亏状态</th><th>策略</th><th>完整订单 ID</th></tr></thead><tbody>{% for t in trades %}<tr><td>{{ t.created_at|bj_time }}</td><td>{{ t.symbol }}</td><td>{{ '开仓请求' if t.action == 'open' else '平仓请求' }}</td><td>{{ t.price }} / {{ t.quantity }}</td><td>待交易所成交核实，不计入总额</td><td>{{ strategy_names.get(t.strategy_id, '未知') }}</td><td>{{ t.order_id or '未知' }}</td></tr>{% else %}<tr><td colspan="7">暂无旧订单记录</td></tr>{% endfor %}</tbody></table></div>
 {% endif %}
+<nav><ul class="pagination pagination-sm justify-content-center"><li class="page-item {{ 'disabled' if page <= 1 else '' }}"><a class="page-link" href="?source={{ source }}&page={{ page-1 }}{{ '&strategy_id=' ~ filter_strategy_id if filter_strategy_id else '' }}">上一页</a></li><li class="page-item disabled"><span class="page-link">{{ page }} / {{ total_pages }}</span></li><li class="page-item {{ 'disabled' if page >= total_pages else '' }}"><a class="page-link" href="?source={{ source }}&page={{ page+1 }}{{ '&strategy_id=' ~ filter_strategy_id if filter_strategy_id else '' }}">下一页</a></li></ul></nav>
 </div>
 {% endblock %}
-
-{% block scripts %}<script src="/static/monitor.js?v=20261106-1"></script>{% endblock %}
+{% block scripts %}<script src="/static/monitor.js?v=20261106-1"></script><script src="/static/trades.js?v=20261107-1"></script>{% endblock %}
