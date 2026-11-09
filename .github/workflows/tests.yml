@@ -6,6 +6,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
     defaults:
       run:
         shell: bash
@@ -25,7 +28,7 @@ jobs:
           from app.security import hash_password
           from cryptography.fernet import Fernet
           import secrets
-          Path('.env').write_text('APP_USERNAME=test-admin\nAPP_PASSWORD_HASH='+hash_password('ci-test-only-password')+'\nAPP_SESSION_SECRET='+secrets.token_urlsafe(48)+'\nENCRYPTION_KEY='+Fernet.generate_key().decode()+'\n')
+          Path('.env').write_text('APP_USERNAME=test-admin\nAPP_PASSWORD_HASH='+hash_password('ci-test-only-password')+'\nAPP_SESSION_SECRET='+secrets.token_urlsafe(48)+'\nENCRYPTION_KEY='+Fernet.generate_key().decode()+'\n', encoding='utf-8')
           from app.models import init_db
           init_db()
           PY

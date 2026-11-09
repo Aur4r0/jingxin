@@ -22,10 +22,10 @@ class MonitorTests(unittest.TestCase):
             # application/json 数据块由 DOM 单独读取，不作为代码检查。
             if path=='/positions':
                 parser.code=[code for code in parser.code if code.strip()!='[]']
-            result=subprocess.run(['node','--check'],input='\n'.join(parser.code),text=True,capture_output=True)
+            result=subprocess.run(['node','--check'],input='\n'.join(parser.code),text=True,encoding='utf-8',capture_output=True)
             self.assertEqual(result.returncode,0,result.stderr)
     def test_frontend_monitor_failure_and_background_pause(self):
-        result=subprocess.run(['node','tests/monitor.test.cjs'],text=True,capture_output=True)
+        result=subprocess.run(['node','tests/monitor.test.cjs'],text=True,encoding='utf-8',capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
 
 if __name__=='__main__':unittest.main()

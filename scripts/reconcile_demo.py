@@ -1,5 +1,6 @@
 """生成模拟盘只读对账报告。不会导入引擎或创建数据库。"""
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone, timedelta
 import json
 import os
@@ -18,7 +19,7 @@ def load_local(database, env, instrument):
         raise ValueError('数据库或配套 .env 不存在')
     key = dotenv_values(env).get('ENCRYPTION_KEY')
     cipher = Fernet(key.encode())
-    with sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True) as db:
+    with closing(sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True)) as db:
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         cfg = db.execute('SELECT * FROM system_config LIMIT 1').fetchone()

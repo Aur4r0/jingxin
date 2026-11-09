@@ -1,5 +1,6 @@
 """部署前离线检查，不连接交易所，不展示密钥。"""
 import argparse
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
@@ -21,7 +22,7 @@ try:fernet=Fernet(config.get('ENCRYPTION_KEY','').encode())
 except Exception:fernet=None;failures.append('加密密钥格式无效')
 if os.name!='nt' and Path(args.env).exists() and Path(args.env).stat().st_mode & 0o007:failures.append('.env 对其他用户开放了访问权限')
 if Path(args.database).is_file():
-    with sqlite3.connect(f'file:{Path(args.database).resolve()}?mode=ro',uri=True) as db:
+    with closing(sqlite3.connect(Path(args.database).resolve().as_uri()+'?mode=ro',uri=True)) as db:
         if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':failures.append('数据库完整性检查失败')
         tables={row[0] for row in db.execute("select name from sqlite_master where type='table'")}
         if 'strategies' in tables:

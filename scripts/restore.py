@@ -1,5 +1,6 @@
 """只恢复到新的空目录，默认暂停全部策略，不覆盖运行实例。"""
 import argparse
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
@@ -16,7 +17,7 @@ if target.exists():raise SystemExit('目标目录已存在，取消恢复；请�
 if not (source/'.env').is_file() or not (source/'trading.db').is_file():raise SystemExit('备份必须包含 .env 和 trading.db')
 try:
     config=dotenv_values(source/'.env');fernet=Fernet(config['ENCRYPTION_KEY'].encode())
-    with sqlite3.connect(f'file:{source/"trading.db"}?mode=ro',uri=True) as db:
+    with closing(sqlite3.connect((source/'trading.db').as_uri()+'?mode=ro',uri=True)) as db:
         if db.execute('PRAGMA integrity_check').fetchone()[0]!='ok':raise ValueError()
         tables={row[0] for row in db.execute("select name from sqlite_master where type='table'")}
         if 'strategies' not in tables:raise ValueError()
@@ -27,7 +28,11 @@ try:
 except Exception:raise SystemExit('备份或配套密钥验证失败，未创建目标目录')
 os.umask(0o077)
 target.mkdir(parents=True)
-with sqlite3.connect(f'file:{source/"trading.db"}?mode=ro',uri=True) as original,sqlite3.connect(target/'trading.db') as restored:
+with (
+    closing(sqlite3.connect((source/'trading.db').as_uri()+'?mode=ro',uri=True)) as original,
+    closing(sqlite3.connect(target/'trading.db')) as restored,
+    restored,
+):
     original.backup(restored)
     restored.execute('UPDATE strategies SET enabled=0')
     restored.commit()

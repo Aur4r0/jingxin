@@ -161,18 +161,18 @@ class WorkspaceTests(unittest.TestCase):
 
     def test_assets_scope_and_no_secret_storage(self):
         root=Path(__file__).resolve().parents[1]
-        css=(root/'static/workspace.css').read_text();js=(root/'static/workspace.js').read_text()
+        css=(root/'static/workspace.css').read_text(encoding='utf-8');js=(root/'static/workspace.js').read_text(encoding='utf-8')
         self.assertIn('html[data-theme="light"] .jx',css)
         self.assertIn('@media(max-width:700px)',css)
         self.assertNotIn('localStorage.setItem',js)
         self.assertNotIn('sessionStorage.setItem',js)
-        monitor=(root/'static/monitor.js').read_text()
+        monitor=(root/'static/monitor.js').read_text(encoding='utf-8')
         self.assertIn('details.jx-log-record[open]',monitor)
         self.assertIn('details.jx-position-record[open]',monitor)
 
     def test_auto_refresh_protects_reading_and_actions(self):
         import subprocess
-        result=subprocess.run(['node','tests/workspace-monitor.test.cjs'],text=True,capture_output=True)
+        result=subprocess.run(['node','tests/workspace-monitor.test.cjs'],text=True,encoding='utf-8',capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
 
     def test_all_inline_scripts_parse(self):
@@ -181,7 +181,7 @@ class WorkspaceTests(unittest.TestCase):
         for path in ['/login','/overview','/positions','/strategies','/strategies/new','/strategies/1/edit','/logs','/settings','/prompt-templates']:
             html=self.client.get(path).text
             parser=Scripts();parser.feed(html)
-            result=subprocess.run(['node','--check'],input='\n'.join(parser.code),text=True,capture_output=True)
+            result=subprocess.run(['node','--check'],input='\n'.join(parser.code),text=True,encoding='utf-8',capture_output=True)
             self.assertEqual(result.returncode,0,path+result.stderr)
 
     def test_blank_strategy_filter_is_all_and_invalid_is_reported(self):

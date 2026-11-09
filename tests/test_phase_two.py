@@ -31,7 +31,7 @@ class PhaseTwoTests(unittest.TestCase):
         self.assertIn('name="enabled" type="hidden" value=""',response.text)
         self.assertNotIn('bi-sun"></i> 日间',response.text)
         parser=Scripts();parser.feed(response.text)
-        result=subprocess.run(['node','--check'],input='\n'.join(parser.code),text=True,capture_output=True)
+        result=subprocess.run(['node','--check'],input='\n'.join(parser.code),text=True,encoding='utf-8',capture_output=True)
         self.assertEqual(result.returncode,0,result.stderr)
     def test_edit_preserves_existing_values(self):
         from unittest.mock import MagicMock

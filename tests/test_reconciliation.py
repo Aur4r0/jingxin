@@ -1,6 +1,7 @@
 import unittest
+from contextlib import closing
 from decimal import Decimal
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from app.contracts import Contract, inst_id
 from app.reconciliation import collect, paged, read, summarize_fills, STATUS
 
@@ -92,21 +93,35 @@ class ReadOnlyConfigurationTests(unittest.TestCase):
             database, env = base / 'test.db', base / '.env'
             key = Fernet.generate_key()
             cipher = Fernet(key)
-            env.write_text('ENCRYPTION_KEY=' + key.decode())
-            with sqlite3.connect(database) as db:
+            env.write_text('ENCRYPTION_KEY=' + key.decode(), encoding='utf-8')
+            with closing(sqlite3.connect(database)) as db, db:
                 db.execute('CREATE TABLE system_config (okx_simulated integer, okx_sim_api_key_enc text, okx_sim_secret_key_enc text, okx_sim_passphrase_enc text, okx_proxy text)')
                 db.execute('INSERT INTO system_config VALUES (1,?,?,?,?)', (*[cipher.encrypt(x.encode()).decode() for x in ('test-key','test-secret','test-pass')], ''))
                 db.execute('CREATE TABLE trades (id integer,strategy_id integer,symbol text,order_id text,status text,price real,quantity real,pnl real,fee real,tp_order_id text,sl_order_id text)')
                 db.execute('CREATE TABLE strategies (enabled integer)')
                 db.execute('INSERT INTO strategies VALUES (1)')
             before = database.read_bytes()
-            credentials, _, _, enabled = cli.load_local(database, env, 'BTC-USDT-SWAP')
-            self.assertEqual(credentials, ['test-key','test-secret','test-pass'])
-            self.assertEqual(enabled, 1)
-            self.assertEqual(before, database.read_bytes())
-            with sqlite3.connect(database) as db:
-                db.execute('UPDATE system_config SET okx_simulated=0')
-            with self.assertRaises(ValueError): cli.load_local(database, env, 'BTC-USDT-SWAP')
-            with sqlite3.connect(database) as db:
-                db.execute("UPDATE system_config SET okx_simulated=1, okx_sim_secret_key_enc=''")
-            with self.assertRaises(ValueError): cli.load_local(database, env, 'BTC-USDT-SWAP')
+            connect = sqlite3.connect
+            connections = []
+            def tracked_connect(*args, **kwargs):
+                connection = connect(*args, **kwargs)
+                connections.append(connection)
+                return connection
+            try:
+                with patch.object(sqlite3, 'connect', side_effect=tracked_connect):
+                    credentials, _, _, enabled = cli.load_local(database, env, 'BTC-USDT-SWAP')
+                    self.assertEqual(credentials, ['test-key','test-secret','test-pass'])
+                    self.assertEqual(enabled, 1)
+                    self.assertEqual(before, database.read_bytes())
+                    with closing(sqlite3.connect(database)) as db, db:
+                        db.execute('UPDATE system_config SET okx_simulated=0')
+                    with self.assertRaises(ValueError): cli.load_local(database, env, 'BTC-USDT-SWAP')
+                    with closing(sqlite3.connect(database)) as db, db:
+                        db.execute("UPDATE system_config SET okx_simulated=1, okx_sim_secret_key_enc=''")
+                    with self.assertRaises(ValueError): cli.load_local(database, env, 'BTC-USDT-SWAP')
+                for connection in connections:
+                    with self.assertRaises(sqlite3.ProgrammingError):
+                        connection.execute('select 1')
+            finally:
+                for connection in connections:
+                    connection.close()

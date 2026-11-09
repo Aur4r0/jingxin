@@ -159,8 +159,8 @@ class DashboardTests(unittest.TestCase):
 
     def test_theme_mobile_and_keyboard_chart_contract(self):
         root=Path(__file__).resolve().parents[1]
-        css=(root/'static/trades.css').read_text()
-        js=(root/'static/trades.js').read_text()
+        css=(root/'static/trades.css').read_text(encoding='utf-8')
+        js=(root/'static/trades.js').read_text(encoding='utf-8')
         self.assertIn('html[data-theme="light"]',css)
         self.assertIn('@media(max-width:700px)',css)
         self.assertIn('overflow-wrap:anywhere',css)
