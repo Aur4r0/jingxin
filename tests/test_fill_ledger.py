@@ -130,7 +130,7 @@ class LedgerTests(unittest.TestCase):
                           price=1, quantity=1, pnl=999999, fee=0))
         self.db.commit()
         request = Request({'type':'http', 'method':'GET', 'path':'/trades', 'headers':[]})
-        response = trades_page(request, strategy_id=None, page=2, source='fills', db=self.db)
+        response = trades_page(request, strategy_id=None, page=2, source='fills', db=self.db, period='all', page_size=50)
         self.assertEqual(response.context['total'], 51)
         self.assertEqual(len(response.context['fills']), 1)
         self.assertEqual(response.context['summary']['net'], Decimal('48.45'))

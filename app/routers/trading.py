@@ -81,6 +81,18 @@ def trades_count(strategy_id: int | None = None, db: Session = Depends(get_db)):
     return {"count": q.count()}
 
 
+@router.get("/trades/statistics")
+def trade_statistics(period: str = "today", start_date: str = "", end_date: str = "",
+                     symbol: str = "", db: Session = Depends(get_db)):
+    from app.trade_dashboard import dashboard, public_stats
+    try:
+        return public_stats(dashboard(db, period, start_date, end_date, symbol))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from None
+    except RuntimeError:
+        raise HTTPException(409, "无法读取模拟盘配置，请检查配套加密密钥") from None
+
+
 @router.post("/trades/sync-fills")
 def sync_fills_now(db: Session = Depends(get_db)):
     from app.fill_ledger import sync_demo_fills

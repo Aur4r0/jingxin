@@ -245,50 +245,57 @@ def trades_page(
     page: int = Query(1, ge=1),
     source: str = "fills",
     db: Session = Depends(get_db),
+    period: str = "today",
+    start_date: str = "",
+    end_date: str = "",
+    symbol: str = "",
+    page_size: int = 10,
 ):
-    from app.fill_ledger import account_key, fill_summary, fill_view
-    from app.models import ExecutionFill
+    from app.trade_dashboard import dashboard, money, tone, PERIODS
     from app.runtime_status import snapshot
-    page_size = 50
-    if source not in ("fills", "legacy"):
-        source = "fills"
     error = ""
-    views, summary = [], None
+    source = "legacy" if source == "legacy" else "fills"
     legacy_q = db.query(Trade)
     if strategy_id:
         legacy_q = legacy_q.filter(Trade.strategy_id == strategy_id)
     legacy_count = legacy_q.count()
+    state = dict(summary=None, fills=[], total=0, page=page, page_size=page_size, total_pages=1,
+                 chart=[], period=period, start_date=start_date, end_date=end_date, symbol=symbol,
+                 symbols=[], range_label="", known_range=None, coverage_warning="", prev_url="#", next_url="#")
+    trades = []
     if source == "legacy":
-        total = legacy_count
-        trades = legacy_q.order_by(Trade.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
+        if page_size not in (10, 20, 50):
+            page_size = 10
+        total_pages = max(1, math.ceil(legacy_count / page_size))
+        page = min(page, total_pages)
+        trades = legacy_q.order_by(Trade.id.desc()).offset((page-1)*page_size).limit(page_size).all()
+        from urllib.parse import urlencode
+        link = lambda p: "/trades?" + urlencode(dict(source="legacy", page=p, page_size=page_size, **({"strategy_id":strategy_id} if strategy_id else {})))
+        state.update(total=legacy_count, page=page, page_size=page_size, total_pages=total_pages,
+                     prev_url=link(max(1,page-1)), next_url=link(min(total_pages,page+1)))
     else:
-        trades = []
         try:
-            scope = account_key(db.query(SystemConfig).first())
-            q = db.query(ExecutionFill).filter(ExecutionFill.environment == "demo", ExecutionFill.account_key == scope)
-            # 当前成交不能可靠归属策略，不把账户级数据当作策略盈亏。
             if strategy_id:
-                error = "成交尚未可靠归属策略；请清除策略筛选查看账户成交，旧记录可在另一标签查看"
-                total = 0
-            else:
-                total = q.count()
-                summary = fill_summary(q.yield_per(500)) if total else None
-                rows = q.order_by(ExecutionFill.filled_at.desc(), ExecutionFill.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
-                views = [fill_view(row) for row in rows]
+                raise ValueError("成交尚未可靠归属策略；请清除策略筛选查看账户成交")
+            state = dashboard(db, period, start_date, end_date, symbol, page, page_size)
         except ValueError as exc:
             error = str(exc)
-            total = 0
         except RuntimeError:
             error = "无法解密模拟盘配置，请检查配套加密密钥"
-            total = 0
+    sync = snapshot().get("fills", {})
+    last_success = sync.get("last_success")
+    sync_time = ""
+    if last_success:
+        try:
+            sync_time = datetime.fromisoformat(last_success).astimezone(ZoneInfo("Asia/Shanghai")).strftime("%m-%d %H:%M")
+        except ValueError:
+            pass
     return templates.TemplateResponse("trades.html", {
-        "request": request, "active_page": "trades", "trades": trades, "fills": views,
-        "source": source, "summary": summary, "ledger_error": error,
-        "sync_status": snapshot().get("fills", {}),
-        "strategies": db.query(Strategy).order_by(Strategy.id.desc()).all(),
-        "strategy_names": _strategy_name_map(db), "filter_strategy_id": strategy_id,
-        "page": page, "total_pages": max(1, math.ceil(total / page_size)),
-        "total": total, "legacy_count": legacy_count,
+        **state, "request":request, "active_page":"trades", "trades":trades,
+        "source":source, "ledger_error":error, "sync_status":sync, "sync_time":sync_time,
+        "strategies":db.query(Strategy).order_by(Strategy.id.desc()).all(),
+        "strategy_names":_strategy_name_map(db), "filter_strategy_id":strategy_id,
+        "legacy_count":legacy_count, "money":money, "tone":tone, "periods":PERIODS,
     })
 
 
